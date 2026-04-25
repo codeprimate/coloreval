@@ -15,7 +15,7 @@
     />
     <title>Coloreval</title>
     <style>
-      /* First paint before the JS bundle runs (Vite rewrites the module URL). */
+      /* Minimal first paint while the app bundle loads. */
       html {
         line-height: 1.45;
         -webkit-text-size-adjust: 100%;
@@ -58,8 +58,8 @@
         font-size: 0.8em;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-CenR-CdY.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-C5vZ-OYL.css">
+    <script type="module" crossorigin src="./assets/index-zw8zzjrY.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BUyZ3zsN.css">
     <!-- coloreval v0.1.0 -->
   </head>
   <body>
@@ -67,12 +67,7 @@
       <div class="boot" role="status" aria-live="polite">
         <h1 class="boot__title">Coloreval</h1>
         <p class="boot__status">Loading…</p>
-        <p class="boot__hint">
-          Production output is static files under <code>dist/</code> after
-          <code>npm run build</code>. Serve that folder with any HTTP static host (or
-          <code>npm run preview</code>). For development use <code>npm run dev</code>. Opening as
-          <code>file://</code> may still fail in some browsers (module security); prefer a real URL.
-        </p>
+        <p class="boot__hint">Preparing the application.</p>
       </div>
     </div>
     <noscript>
@@ -87,10 +82,7 @@
         "
       >
         <p style="margin: 0 0 0.75rem; font-weight: 600">Coloreval needs JavaScript enabled.</p>
-        <p style="margin: 0; color: #5c5c5c">
-          Serve the built <code>dist/</code> folder over HTTP (e.g. <code>npm run preview</code>) or
-          run <code>npm run dev</code> while developing.
-        </p>
+        <p style="margin: 0; color: #5c5c5c">Please open this app through a web server URL.</p>
       </div>
     </noscript>
   </body>
