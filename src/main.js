@@ -295,22 +295,28 @@ function renderPlay() {
         </div>
         <form class="sliders" id="play-form" novalidate>
           <div class="field">
-            <label for="hue">Hue</label>
-            <input id="hue" name="hue" type="range" min="0" max="359" value="${hue}" />
+            <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">➜</span>
+            <div class="field__control">
+              <label for="hue">Hue</label>
+              <input id="hue" name="hue" type="range" min="0" max="359" value="${hue}" />
+            </div>
           </div>
           <div class="field">
-            <label for="saturation">Saturation</label>
-            <input id="saturation" name="saturation" type="range" min="0" max="100" value="${sat}" />
+            <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">➜</span>
+            <div class="field__control">
+              <label for="saturation">Saturation</label>
+              <input id="saturation" name="saturation" type="range" min="0" max="100" value="${sat}" />
+            </div>
           </div>
           <div class="field">
-            <label for="value">Value</label>
-            <input id="value" name="value" type="range" min="0" max="100" value="${val}" />
+            <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">➜</span>
+            <div class="field__control">
+              <label for="value">Value</label>
+              <input id="value" name="value" type="range" min="0" max="100" value="${val}" />
+            </div>
           </div>
+          <span class="visually-hidden" aria-live="polite">Adjust a slider to continue</span>
         </form>
-        <div class="slider-hint" aria-live="polite">
-          <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">↕</span>
-          <span class="visually-hidden">Adjust a slider to continue</span>
-        </div>
         <div class="stack stack--actions">
           <button type="button" class="btn btn--primary" data-action="commit" ${isCommitDisabled ? "disabled" : ""}>${label}</button>
         </div>
@@ -423,30 +429,37 @@ function bindScreenHandlers() {
     };
     form.addEventListener("input", sync);
     form.addEventListener("change", sync);
-    if (actionStack instanceof HTMLElement) {
+    if (commitBtn instanceof HTMLButtonElement && actionStack instanceof HTMLElement) {
       const showHintIfCommitDisabled = () => {
-        if (!(commitBtn instanceof HTMLButtonElement) || !commitBtn.disabled) return;
+        if (!commitBtn.disabled) return;
         flashSliderHint();
       };
-      actionStack.addEventListener("mouseover", showHintIfCommitDisabled);
-      actionStack.addEventListener("pointerdown", showHintIfCommitDisabled);
+      commitBtn.addEventListener("mouseover", showHintIfCommitDisabled);
+      commitBtn.addEventListener("pointerdown", showHintIfCommitDisabled);
     }
   }
 }
 
 function flashSliderHint() {
   if (!root) return;
-  const arrow = root.querySelector('[data-role="slider-hint-arrow"]');
-  if (!(arrow instanceof HTMLElement)) return;
-  arrow.classList.remove("slider-hint-arrow--active");
-  // Force a restart when repeatedly hovering the disabled button.
-  void arrow.offsetWidth;
-  arrow.classList.add("slider-hint-arrow--active");
+  const arrows = root.querySelectorAll('[data-role="slider-hint-arrow"]');
+  if (!arrows.length) return;
+  arrows.forEach((arrow) => {
+    if (!(arrow instanceof HTMLElement)) return;
+    arrow.classList.remove("slider-hint-arrow--active");
+    // Force a restart when repeatedly hovering the disabled button.
+    void arrow.offsetWidth;
+    arrow.classList.add("slider-hint-arrow--active");
+  });
   if (sliderHintTimer !== null) {
     window.clearTimeout(sliderHintTimer);
   }
   sliderHintTimer = window.setTimeout(() => {
-    arrow.classList.remove("slider-hint-arrow--active");
+    arrows.forEach((arrow) => {
+      if (arrow instanceof HTMLElement) {
+        arrow.classList.remove("slider-hint-arrow--active");
+      }
+    });
     sliderHintTimer = null;
   }, 1300);
 }
