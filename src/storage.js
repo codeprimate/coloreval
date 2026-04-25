@@ -28,36 +28,58 @@ export const LS_KEY_PREFS = "coloreval_prefs_v1";
  */
 
 /**
- * @returns {{ hintDismissed?: boolean, schemaVersion?: number }}
+ * @returns {{ hintDismissed?: boolean, challengeShareUsername?: string, schemaVersion?: number }}
  */
 export function loadPrefs() {
+  const fallback = defaultPrefs();
   try {
     const raw = localStorage.getItem(LS_KEY_PREFS);
-    if (!raw) return { hintDismissed: false, schemaVersion: STORAGE_SCHEMA_VERSION };
+    if (!raw) return fallback;
     const data = JSON.parse(raw);
     if (typeof data !== "object" || data === null) {
-      return { hintDismissed: false, schemaVersion: STORAGE_SCHEMA_VERSION };
+      return fallback;
     }
+    const challengeShareUsername =
+      typeof data.challengeShareUsername === "string" ? data.challengeShareUsername.trim() : "";
     return {
       hintDismissed: Boolean(data.hintDismissed),
+      challengeShareUsername,
       schemaVersion:
         typeof data.schemaVersion === "number" ? data.schemaVersion : STORAGE_SCHEMA_VERSION,
     };
   } catch {
-    return { hintDismissed: false, schemaVersion: STORAGE_SCHEMA_VERSION };
+    return fallback;
   }
 }
 
 /**
- * @param {{ hintDismissed?: boolean }} prefs
+ * @param {{ hintDismissed?: boolean, challengeShareUsername?: string }} prefs
  * @returns {{ ok: boolean, error?: string }}
  */
 export function savePrefs(prefs) {
+  const existing = loadPrefs();
   const payload = {
     schemaVersion: STORAGE_SCHEMA_VERSION,
-    hintDismissed: Boolean(prefs.hintDismissed),
+    hintDismissed:
+      prefs.hintDismissed === undefined
+        ? Boolean(existing.hintDismissed)
+        : Boolean(prefs.hintDismissed),
+    challengeShareUsername:
+      typeof prefs.challengeShareUsername === "string"
+        ? prefs.challengeShareUsername.trim()
+        : typeof existing.challengeShareUsername === "string"
+          ? existing.challengeShareUsername
+          : "",
   };
   return writeJson(LS_KEY_PREFS, payload);
+}
+
+function defaultPrefs() {
+  return {
+    hintDismissed: false,
+    challengeShareUsername: "",
+    schemaVersion: STORAGE_SCHEMA_VERSION,
+  };
 }
 
 /**

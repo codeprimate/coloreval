@@ -40,9 +40,20 @@ describe("storage", () => {
 
   it("round-trips prefs", () => {
     expect(loadPrefs().hintDismissed).toBe(false);
-    savePrefs({ hintDismissed: true });
+    expect(loadPrefs().challengeShareUsername).toBe("");
+    savePrefs({ hintDismissed: true, challengeShareUsername: "alice" });
     expect(loadPrefs().hintDismissed).toBe(true);
+    expect(loadPrefs().challengeShareUsername).toBe("alice");
     expect(JSON.parse(mem.getItem(LS_KEY_PREFS)).schemaVersion).toBe(STORAGE_SCHEMA_VERSION);
+  });
+
+  it("merges partial prefs updates", () => {
+    savePrefs({ challengeShareUsername: "bob" });
+    savePrefs({ hintDismissed: true });
+    expect(loadPrefs()).toMatchObject({
+      hintDismissed: true,
+      challengeShareUsername: "bob",
+    });
   });
 
   it("appends sessions", () => {
