@@ -1,6 +1,10 @@
 # Coloreval
 
-A minimal static SPA for a color-matching game: match reference swatches using HSV controls, score by accuracy, and keep history in `localStorage`. Gameplay is not implemented yet—this repo is tooling, layout, and hosting scaffolding.
+A static SPA color-matching game: match reference swatches with HSV controls, score at the end, keep history and in-progress drafts in `localStorage`.
+
+**Static output:** `npm run build` writes a complete site to **`dist/`** (HTML, hashed JS/CSS). Deploy that directory to any static host (S3, nginx, GitHub Pages, Netlify, the included Docker image, etc.). Asset URLs are **relative** (`base: './'`) so the same files work at a subpath or from disk in browsers that allow local ES modules.
+
+**Local dev:** `npm run dev` (Vite HMR). **Smoke the build:** `npm run preview` serves `dist/` over HTTP.
 
 ## Prerequisites
 
@@ -43,6 +47,7 @@ Open [http://localhost:8080](http://localhost:8080) (host `8080` → container `
 ## Docs
 
 - [docs/architecture.md](docs/architecture.md) — build and deploy flow
+- [docs/manual-browser-test.md](docs/manual-browser-test.md) — manual QA checklist
 - [AGENTS.md](AGENTS.md) — conventions for agents and contributors
 
 ## Bootstrap

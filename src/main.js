@@ -1,6 +1,430 @@
 import "./styles/base.css";
 
+import { hsvToCssColor } from "./color.js";
+import {
+  ROUNDS_PER_RUN,
+  createRun,
+  commitCurrentRound,
+  buildFinishedSession,
+  hydrateRunFromDraft,
+  runToDraftSnapshot,
+  currentRoundIndex,
+  currentTargetHsv,
+} from "./run.js";
+import { attachColorevalConsoleHelpers } from "./console-helpers.js";
+import {
+  appendSession,
+  clearDraft,
+  loadDraftRaw,
+  loadPrefs,
+  loadSessions,
+  saveDraft,
+  savePrefs,
+} from "./storage.js";
+
+/** @typedef {'home' | 'play' | 'results' | 'history'} Screen */
+
+const state = {
+  /** @type {Screen} */
+  screen: "home",
+  /** @type {ReturnType<typeof createRun> | null} */
+  run: null,
+  /** @type {{ aggregatePct: number, rounds: object[] } | null} */
+  lastResult: null,
+  /** @type {string | null} */
+  storageError: null,
+  /** @type {{ endedAt: string, aggregatePct: number, rounds: object[] } | null} */
+  pendingSession: null,
+};
+
 const root = document.getElementById("app");
-if (root) {
-  root.innerHTML = `<p class="placeholder">Coloreval</p>`;
+
+function persistDraft() {
+  if (!state.run) return;
+  const snap = runToDraftSnapshot(state.run);
+  const res = saveDraft(snap);
+  if (!res.ok) state.storageError = res.error ?? "save";
 }
+
+function tryBootstrapResume() {
+  const raw = loadDraftRaw();
+  if (!raw) return false;
+  const { schemaVersion, ...body } = raw;
+  void schemaVersion;
+  const run = hydrateRunFromDraft(body);
+  if (!run) {
+    clearDraft();
+    return false;
+  }
+  if (run.committed.length >= run.roundsPerRun) {
+    clearDraft();
+    return false;
+  }
+  state.run = run;
+  state.screen = "play";
+  return true;
+}
+
+function init() {
+  if (!root) return;
+  if (tryBootstrapResume()) {
+    bindGlobalPersist();
+    render();
+    return;
+  }
+  state.screen = "home";
+  bindGlobalPersist();
+  render();
+}
+
+function bindGlobalPersist() {
+  window.addEventListener("pagehide", () => {
+    persistDraft();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") persistDraft();
+  });
+}
+
+function quitRun() {
+  if (!state.run) return;
+  if (!confirm("Abandon this run? Progress will not be saved.")) return;
+  clearDraft();
+  state.run = null;
+  state.screen = "home";
+  render();
+}
+
+function startNewRun() {
+  clearDraft();
+  state.run = createRun(ROUNDS_PER_RUN);
+  const res = saveDraft(runToDraftSnapshot(state.run));
+  if (!res.ok) {
+    state.storageError = res.error ?? "save";
+  }
+  state.screen = "play";
+  render();
+}
+
+function finishRunToResults() {
+  if (!state.run) return;
+  const { aggregatePct, rounds } = buildFinishedSession(state.run);
+  const endedAt = new Date().toISOString();
+  const append = appendSession({ endedAt, aggregatePct, rounds });
+  if (!append.ok) {
+    state.storageError = append.error ?? "save";
+    state.pendingSession = { endedAt, aggregatePct, rounds };
+  } else {
+    state.pendingSession = null;
+  }
+  clearDraft();
+  state.lastResult = { aggregatePct, rounds };
+  state.run = null;
+  state.screen = "results";
+  render();
+}
+
+function onCommitRound() {
+  if (!state.run) return;
+  const n = state.run.roundsPerRun;
+  const idx = currentRoundIndex(state.run);
+  const isLast = idx === n - 1;
+  if (isLast) {
+    commitCurrentRound(state.run);
+    finishRunToResults();
+    return;
+  }
+  commitCurrentRound(state.run);
+  persistDraft();
+  render();
+}
+
+function hsvToRangeValues(hsv) {
+  return {
+    hue: Math.round(((hsv.h % 360) + 360) % 360),
+    sat: Math.round(hsv.s * 100),
+    val: Math.round(hsv.v * 100),
+  };
+}
+
+function parseSliders(form) {
+  const fd = new FormData(form);
+  return {
+    h: Number(fd.get("hue")),
+    s: Number(fd.get("saturation")) / 100,
+    v: Number(fd.get("value")) / 100,
+  };
+}
+
+function render() {
+  if (!root) return;
+  let body = "";
+  if (state.screen === "home") {
+    body = renderHome();
+  } else if (state.screen === "play" && state.run) {
+    body = renderPlay();
+  } else if (state.screen === "results" && state.lastResult) {
+    body = renderResults();
+  } else if (state.screen === "history") {
+    body = renderHistory();
+  } else {
+    state.screen = "home";
+    body = renderHome();
+  }
+  root.innerHTML = storageBannerHtml() + body;
+  bindScreenHandlers();
+}
+
+function storageBannerHtml() {
+  if (!state.storageError && !state.pendingSession) return "";
+  const showRetry = Boolean(state.pendingSession);
+  return `
+    <div class="storage-banner" role="alert">
+      <p class="storage-banner__text">Can’t save scores</p>
+      <div class="storage-banner__actions">
+        ${
+          showRetry
+            ? `<button type="button" class="btn btn--small" data-action="storage-retry">Retry</button>`
+            : ""
+        }
+        <button type="button" class="btn btn--ghost btn--small" data-action="storage-dismiss">Continue without saving</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderHome() {
+  const prefs = loadPrefs();
+  const hint = !prefs.hintDismissed
+    ? `<p class="hint" role="note">Match the target color.</p>
+       <button type="button" class="link" data-action="dismiss-hint">Dismiss hint</button>`
+    : "";
+
+  return `
+    <div class="shell shell--home">
+      <header class="header">
+        <h1 class="title">Coloreval</h1>
+      </header>
+      <main class="main">
+        ${hint}
+        <div class="stack stack--actions">
+          <button type="button" class="btn btn--primary" data-action="play">Play</button>
+          <button type="button" class="btn btn--ghost" data-action="history">History</button>
+        </div>
+      </main>
+    </div>
+  `;
+}
+
+function renderPlay() {
+  const run = state.run;
+  const idx = currentRoundIndex(run);
+  const target = currentTargetHsv(run);
+  if (idx === null || !target) {
+    state.screen = "home";
+    return renderHome();
+  }
+  const displayRound = idx + 1;
+  const n = run.roundsPerRun;
+  const isLast = idx === n - 1;
+  const label = isLast ? "Finish" : "Next";
+  const { hue, sat, val } = hsvToRangeValues(run.userHsv);
+  const targetCss = hsvToCssColor(target);
+  const yoursCss = hsvToCssColor(run.userHsv);
+
+  return `
+    <div class="shell shell--play">
+      <header class="header header--play">
+        <p class="progress" aria-live="polite"><span class="tabular">${displayRound}</span> / <span class="tabular">${n}</span></p>
+      </header>
+      <main class="main main--play">
+        <div class="swatch-row">
+          <div class="swatch-block">
+            <div class="swatch" style="background-color: ${targetCss}" role="img" aria-label="Target color"></div>
+            <span class="swatch-label">Target</span>
+          </div>
+          <div class="swatch-gap" aria-hidden="true"></div>
+          <div class="swatch-block">
+            <div id="yours-swatch" class="swatch" style="background-color: ${yoursCss}" role="img" aria-label="Your color"></div>
+            <span class="swatch-label">Yours</span>
+          </div>
+        </div>
+        <form class="sliders" id="play-form" novalidate>
+          <div class="field">
+            <label for="hue">Hue</label>
+            <input id="hue" name="hue" type="range" min="0" max="359" value="${hue}" />
+          </div>
+          <div class="field">
+            <label for="saturation">Saturation</label>
+            <input id="saturation" name="saturation" type="range" min="0" max="100" value="${sat}" />
+          </div>
+          <div class="field">
+            <label for="value">Value</label>
+            <input id="value" name="value" type="range" min="0" max="100" value="${val}" />
+          </div>
+        </form>
+        <div class="stack stack--actions">
+          <button type="button" class="btn btn--primary" data-action="commit">${label}</button>
+          <button type="button" class="link play-quit" data-action="quit">Quit</button>
+        </div>
+      </main>
+    </div>
+  `;
+}
+
+function renderResults() {
+  const { aggregatePct, rounds } = state.lastResult;
+  const dots = rounds
+    .map(
+      (_, i) =>
+        `<span class="round-dot" style="--dot-score: ${rounds[i].roundScore}" title="Round ${i + 1}"></span>`,
+    )
+    .join("");
+
+  return `
+    <div class="shell shell--results">
+      <main class="main main--results">
+        <p class="score-line"><span class="score tabular">${aggregatePct}</span><span class="score-suffix">% match</span></p>
+        <div class="round-strip" aria-hidden="true">${dots}</div>
+        <div class="stack stack--actions">
+          <button type="button" class="btn btn--primary" data-action="again">Again</button>
+          <button type="button" class="btn btn--ghost" data-action="home">Home</button>
+        </div>
+      </main>
+    </div>
+  `;
+}
+
+function renderHistory() {
+  const sessions = loadSessions().slice().reverse();
+  if (sessions.length === 0) {
+    return `
+      <div class="shell shell--history">
+        <header class="header">
+          <h1 class="title">History</h1>
+        </header>
+        <main class="main">
+          <p class="muted">No runs yet</p>
+          <button type="button" class="btn btn--primary" data-action="play">Play</button>
+        </main>
+      </div>
+    `;
+  }
+  const rows = sessions
+    .map((s) => {
+      const d = new Date(s.endedAt);
+      const dateStr = d.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `<li class="history-row"><span class="history-date">${escapeHtml(dateStr)}</span><span class="tabular history-pct">${s.aggregatePct}%</span></li>`;
+    })
+    .join("");
+
+  return `
+    <div class="shell shell--history">
+      <header class="header">
+        <h1 class="title">History</h1>
+        <button type="button" class="link" data-action="home">Home</button>
+      </header>
+      <main class="main">
+        <ul class="history-list">${rows}</ul>
+      </main>
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function bindScreenHandlers() {
+  root.querySelectorAll("[data-action]").forEach((el) => {
+    el.addEventListener("click", onActionClick);
+  });
+
+  const form = root.querySelector("#play-form");
+  if (form instanceof HTMLFormElement && state.run) {
+    const sync = () => {
+      Object.assign(state.run.userHsv, parseSliders(form));
+      const yours = root.querySelector("#yours-swatch");
+      if (yours instanceof HTMLElement) {
+        yours.style.backgroundColor = hsvToCssColor(state.run.userHsv);
+      }
+    };
+    form.addEventListener("input", sync);
+    form.addEventListener("change", sync);
+  }
+}
+
+/** @param {Event} e */
+function onActionClick(e) {
+  const t = e.target;
+  if (!(t instanceof HTMLElement)) return;
+  const action = t.dataset.action;
+  if (!action) return;
+
+  if (action === "play") {
+    startNewRun();
+    return;
+  }
+  if (action === "history") {
+    state.screen = "history";
+    render();
+    return;
+  }
+  if (action === "home") {
+    state.screen = "home";
+    render();
+    return;
+  }
+  if (action === "again") {
+    startNewRun();
+    return;
+  }
+  if (action === "commit") {
+    onCommitRound();
+    return;
+  }
+  if (action === "quit") {
+    quitRun();
+    return;
+  }
+  if (action === "dismiss-hint") {
+    savePrefs({ hintDismissed: true });
+    render();
+    return;
+  }
+  if (action === "storage-dismiss") {
+    state.storageError = null;
+    state.pendingSession = null;
+    render();
+    return;
+  }
+  if (action === "storage-retry" && state.pendingSession) {
+    const p = state.pendingSession;
+    const append = appendSession({
+      endedAt: p.endedAt,
+      aggregatePct: p.aggregatePct,
+      rounds: p.rounds,
+    });
+    if (append.ok) {
+      state.storageError = null;
+      state.pendingSession = null;
+    } else {
+      state.storageError = append.error ?? "save";
+    }
+    render();
+    return;
+  }
+}
+
+attachColorevalConsoleHelpers();
+init();

@@ -16,13 +16,13 @@ This document captures product UX decisions for the color-matching SPA: referenc
 
 ## Information architecture
 
-| Place    | Role |
-|----------|------|
-| **Home** | Entry: start a run, open history, optional aggregates. |
-| **Play** | Single run: `N` rounds with fixed layout (target + yours + HSV + commit). |
-| **Results** | End-of-run headline score and optional per-round strip; **Again** / **Home**. |
-| **History** | Past runs (summary list); optional row detail if full session data is kept. |
-| **Settings** | Optional: toggles, clear history, dismissed hint — keep thin or defer. |
+| Place        | Role                                                                          |
+| ------------ | ----------------------------------------------------------------------------- |
+| **Home**     | Entry: start a run, open history, optional aggregates.                        |
+| **Play**     | Single run: `N` rounds with fixed layout (target + yours + HSV + commit).     |
+| **Results**  | End-of-run headline score and optional per-round strip; **Again** / **Home**. |
+| **History**  | Past runs (summary list); optional row detail if full session data is kept.   |
+| **Settings** | Optional: toggles, clear history, dismissed hint — keep thin or defer.        |
 
 **Navigation (conceptual):** Home → Play → Results → (Again → Play | Home → Home). Home ↔ History at any time.
 
@@ -40,7 +40,7 @@ Implementation may use in-memory “screen” state, hash routes, or both; IA is
 
 ### 2. First run hint (optional, once)
 
-- At most one line (e.g. *Match the target color*) or no line if **Target** / **Yours** labels suffice.
+- At most one line (e.g. _Match the target color_) or no line if **Target** / **Yours** labels suffice.
 - Persist “dismissed” in settings so it does not repeat.
 
 ### 3. Entering Play
@@ -80,22 +80,23 @@ More whitespace than Play so the score reads as the climax.
 
 ## Copy system
 
-| Context | Preferred copy |
-|---------|----------------|
-| Home primary | **Play** |
-| Home secondary | **History** |
-| Swatch labels | **Target** · **Yours** (use consistently) |
-| Sliders | **Hue** · **Saturation** · **Value** (or **H** · **S** · **V** if space-constrained) |
-| Mid-run commit | **Next** |
-| Last-round commit | **Finish** (or **Score**) |
-| Progress | **`i / N`** |
-| Results | **`n% match`** (headline) |
-| Results actions | **Again** · **Home** |
-| History title | **History** |
-| History empty | **No runs yet** |
-| Storage failure (rare) | **Can’t save scores** + **Retry** / **Continue without saving** |
+| Context                | Preferred copy                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| Home primary           | **Play**                                                                             |
+| Home secondary         | **History**                                                                          |
+| Swatch labels          | **Target** · **Yours** (use consistently)                                            |
+| Sliders                | **Hue** · **Saturation** · **Value** (or **H** · **S** · **V** if space-constrained) |
+| Mid-run commit         | **Next**                                                                             |
+| Abandon run (Play)     | **Quit** (confirm discard; returns Home, clears draft)                               |
+| Last-round commit      | **Finish** (or **Score**)                                                            |
+| Progress               | **`i / N`**                                                                          |
+| Results                | **`n% match`** (headline)                                                            |
+| Results actions        | **Again** · **Home**                                                                 |
+| History title          | **History**                                                                          |
+| History empty          | **No runs yet**                                                                      |
+| Storage failure (rare) | **Can’t save scores** + **Retry** / **Continue without saving**                      |
 
-Avoid long CTAs (*Submit match*, *Lock in*). Avoid redundant “My” / “Your” except in **Yours**.
+Avoid long CTAs (_Submit match_, _Lock in_). Avoid redundant “My” / “Your” except in **Yours**.
 
 ---
 
@@ -112,11 +113,11 @@ Avoid long CTAs (*Submit match*, *Lock in*). Avoid redundant “My” / “Your�
 
 Rough split:
 
-| Kind | Where | UX role |
-|------|--------|---------|
-| Live run | Memory | Current targets, slider state, round index, pending per-round scores until commit/finish. |
+| Kind           | Where          | UX role                                                                                                |
+| -------------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| Live run       | Memory         | Current targets, slider state, round index, pending per-round scores until commit/finish.              |
 | Completed runs | `localStorage` | Append-only **sessions** with stable aggregate % (and optional `rounds[]` for Results/History detail). |
-| Preferences | `localStorage` | Hint dismissed, toggles, schema version inside blob if needed. |
+| Preferences    | `localStorage` | Hint dismissed, toggles, schema version inside blob if needed.                                         |
 
 **Writes:** avoid persisting on every slider move; persist on **Finish** (and optionally per **Next** if crash recovery is required later — if so, add a draft-run concept and a resume rule on Home).
 
@@ -137,4 +138,5 @@ Exact key names and JSON shape belong in implementation notes or `docs/architect
 ## Related documents
 
 - [`architecture.md`](architecture.md) — static SPA, build/hosting, persistence overview.
+- [`manual-browser-test.md`](manual-browser-test.md) — full manual browser integration checklist (human + agent).
 - [`../bootstrap.md`](../bootstrap.md) — original product intent dump.
