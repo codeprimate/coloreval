@@ -1,11 +1,11 @@
 import { matchPercentHsv, randomTargetHsv } from "./color.js";
 
-/** Fixed number of rounds per run (v1). */
+/** Number of rounds per run in schema version 1. */
 export const ROUNDS_PER_RUN = 5;
 
 /**
- * After each **Next**, user sliders reset to this neutral so every round starts the same.
- * H=0, S=0, V=0.5 → mid gray.
+ * Slider values applied after each committed round so every round starts from
+ * the same neutral HSV value (`h=0`, `s=0`, `v=0.5`).
  */
 export const NEUTRAL_USER_HSV = Object.freeze({ h: 0, s: 0, v: 0.5 });
 
@@ -40,7 +40,8 @@ export function createRun(roundsPerRun = ROUNDS_PER_RUN, rng = Math.random) {
 }
 
 /**
- * Current round index 0..N-1 while playing; `null` if run is complete (all rounds committed).
+ * Returns the current round index (`0..N-1`) while a run is active.
+ * Returns `null` when all rounds are committed.
  * @param {ReturnType<typeof createRun>} run
  * @returns {number | null}
  */
@@ -61,7 +62,7 @@ export function currentTargetHsv(run) {
 
 /**
  * @param {ReturnType<typeof createRun>} run
- * @returns {number | null} live match % for current sliders vs current target
+ * @returns {number | null} Live match percentage for current sliders vs. target.
  */
 export function currentLiveMatchPercent(run) {
   const t = currentTargetHsv(run);
@@ -70,7 +71,7 @@ export function currentLiveMatchPercent(run) {
 }
 
 /**
- * Commits the current round (scores `run.userHsv` vs current target), advances or completes run.
+ * Commits the current round score and advances or completes the run.
  * @param {ReturnType<typeof createRun>} run
  * @returns {{ done: boolean }}
  */
@@ -89,7 +90,7 @@ export function commitCurrentRound(run) {
 }
 
 /**
- * Mean of committed round scores (same value shown on Results and stored on session).
+ * Returns the mean of committed round scores.
  * @param {CommittedRound[]} committed
  * @returns {number} integer 0–100
  */
@@ -115,7 +116,7 @@ export function buildFinishedSession(run) {
 }
 
 /**
- * Rebuild in-memory run from persisted draft fields.
+ * Rebuilds an in-memory run from persisted draft fields.
  * @param {object} draft
  * @returns {ReturnType<typeof createRun> | null}
  */
@@ -171,7 +172,7 @@ export function hydrateRunFromDraft(draft) {
 }
 
 /**
- * Snapshot for localStorage draft.
+ * Builds the persisted draft snapshot payload.
  * @param {ReturnType<typeof createRun>} run
  */
 export function runToDraftSnapshot(run) {

@@ -1,6 +1,6 @@
 import { LS_KEY_DRAFT, LS_KEY_PREFS, LS_KEY_SESSIONS, clearDraft } from "./storage.js";
 
-/** Key names written by the app (for humans and agents poking `localStorage`). */
+/** `localStorage` key names written by the app. */
 export const COLOREVAL_STORAGE_KEYS = Object.freeze({
   sessions: LS_KEY_SESSIONS,
   draft: LS_KEY_DRAFT,
@@ -8,7 +8,7 @@ export const COLOREVAL_STORAGE_KEYS = Object.freeze({
 });
 
 /**
- * Remove completed-run history only.
+ * Removes completed-run history only.
  * @returns {{ ok: boolean, key: string, error?: string }}
  */
 export function clearColorevalSessions() {
@@ -21,7 +21,7 @@ export function clearColorevalSessions() {
 }
 
 /**
- * Remove preferences only (e.g. hint dismissed).
+ * Removes preferences only (for example, `hintDismissed`).
  * @returns {{ ok: boolean, key: string, error?: string }}
  */
 export function clearColorevalPrefs() {
@@ -34,7 +34,7 @@ export function clearColorevalPrefs() {
 }
 
 /**
- * Remove in-progress draft only (same as storage `clearDraft`).
+ * Removes the in-progress draft only.
  * @returns {{ ok: boolean, error?: string }}
  */
 export function clearColorevalDraft() {
@@ -42,7 +42,7 @@ export function clearColorevalDraft() {
 }
 
 /**
- * Clear all Coloreval `localStorage` keys (sessions, draft, prefs).
+ * Clears all Coloreval `localStorage` keys.
  * @returns {{ ok: boolean, sessions: object, draft: object, prefs: object }}
  */
 export function clearAllColorevalData() {
@@ -58,7 +58,7 @@ export function clearAllColorevalData() {
 }
 
 /**
- * Attach `globalThis.colorevalDev` for browser console / automation agents.
+ * Attaches `globalThis.colorevalDev` for browser-console and automation use.
  * @param {typeof globalThis} [target]
  */
 export function attachColorevalConsoleHelpers(target = globalThis) {

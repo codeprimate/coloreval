@@ -3,10 +3,10 @@ import confetti from "canvas-confetti";
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/* ─── Screen transitions ─────────────────────────────────── */
+/** Screen transition animations. */
 
 /**
- * Animate the current shell out, run the swap, animate the new shell in.
+ * Animates the current shell out, runs `swap`, then animates the next shell in.
  * @param {() => void} swap - callback that performs the innerHTML replacement
  * @param {"forward"|"back"|"up"} [direction]
  * @returns {Promise<void>}
@@ -43,11 +43,11 @@ export async function transitionScreen(swap, direction = "forward") {
   }
 }
 
-/* ─── Button press ripple ────────────────────────────────── */
+/** Button press animations. */
 
 /**
- * Wire up scale-press animation to all .btn--primary and .btn--outline
- * elements inside a given root. Safe to call multiple times (uses WeakSet).
+ * Attaches a press-scale animation to `.btn--primary` and `.btn--outline`
+ * elements within `root`. Safe to call multiple times.
  * @param {Element} root
  */
 const _wiredButtons = new WeakSet();
@@ -69,10 +69,10 @@ export function wireButtonAnimations(root) {
   });
 }
 
-/* ─── Round advance ──────────────────────────────────────── */
+/** Round-advance animations. */
 
 /**
- * Gentle fade-in of the two swatches only — no sliding, no full-screen flash.
+ * Fades in the target and user swatches when advancing a round.
  */
 export function animateRoundAdvance() {
   if (reducedMotion()) return;
@@ -94,10 +94,10 @@ export function animateRoundAdvance() {
   }
 }
 
-/* ─── Quit shake ─────────────────────────────────────────── */
+/** Quit confirmation animation. */
 
 /**
- * Shake the play shell, then call onDone (which shows the confirm dialog).
+ * Shakes the quit button, then invokes `onDone`.
  * @param {() => void} onDone
  */
 export function animateQuitShake(onDone) {
@@ -115,10 +115,10 @@ export function animateQuitShake(onDone) {
   );
 }
 
-/* ─── Results animations ─────────────────────────────────── */
+/** Results screen animations. */
 
 /**
- * Count the score element up from 0 to target.
+ * Animates the score from `0` to `target`.
  * @param {Element} el
  * @param {number} target
  */
@@ -140,7 +140,7 @@ function animateScoreCountUp(el, target) {
 }
 
 /**
- * Animate round dots in with a stagger.
+ * Animates round dots with a staggered reveal.
  */
 function animateDots() {
   if (reducedMotion()) {
@@ -162,7 +162,7 @@ function animateDots() {
   );
 }
 
-/** Confetti burst for high scores (≥ 90). */
+/** Shows confetti for high scores (`>= 90`). */
 function fireConfetti() {
   if (reducedMotion()) return;
 
@@ -178,7 +178,7 @@ function fireConfetti() {
   }, 120);
 }
 
-/** Sad droop animation for low scores (≤ 50). */
+/** Runs a droop effect for low scores (`<= 50`). */
 function animateDroop() {
   if (reducedMotion()) return;
   const scoreLine = document.querySelector(".score-line");
@@ -196,7 +196,7 @@ function animateDroop() {
 }
 
 /**
- * Trigger the appropriate result animation based on score.
+ * Triggers result animations for the provided score.
  * @param {number} pct  0–100
  */
 export function triggerResultAnimation(pct) {
