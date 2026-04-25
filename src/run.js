@@ -2,6 +2,7 @@ import { matchPercentHsv, randomTargetHsv } from "./color.js";
 
 /** Number of rounds per run in schema version 1. */
 export const ROUNDS_PER_RUN = 5;
+export const RUN_SEED_DIGITS = 10;
 const MAX_TARGET_RETRIES = 12;
 const MAX_SIMILAR_TARGET_MATCH_PCT = 85;
 
@@ -10,6 +11,49 @@ const MAX_SIMILAR_TARGET_MATCH_PCT = 85;
  * the same midpoint HSV value (`h=180`, `s=0.5`, `v=0.5`).
  */
 export const NEUTRAL_USER_HSV = Object.freeze({ h: 180, s: 0.5, v: 0.5 });
+
+/**
+ * @param {string} hash
+ * @returns {string | null}
+ */
+export function parseSeedFromHash(hash) {
+  if (typeof hash !== "string") return null;
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  const directMatch = raw.match(/^\d{10}$/);
+  if (directMatch) return directMatch[0];
+  const namedMatch = raw.match(/(?:^|[?&;])seed=(\d{10})(?:$|[?&;])/);
+  if (!namedMatch) return null;
+  return namedMatch[1];
+}
+
+/**
+ * @param {() => number} [rng]
+ */
+export function generateRunSeed(rng = Math.random) {
+  let seed = "";
+  for (let i = 0; i < RUN_SEED_DIGITS; i += 1) {
+    seed += Math.floor(rng() * 10);
+  }
+  return seed;
+}
+
+/**
+ * @param {string} seed
+ */
+export function createSeededRng(seed) {
+  let state = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    state = (state * 10 + Number(seed[i])) >>> 0;
+  }
+  if (state === 0) state = 0x6d2b79f5;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 /**
  * Picks a random target, retrying if it is too similar to the previous target.
@@ -45,9 +89,14 @@ function pickVariedTarget(prevTarget, rng) {
  *   committed: CommittedRound[],
  *   userHsv: Hsv,
  *   startedAt: string,
+ *   seed: string,
  * }}
  */
-export function createRun(roundsPerRun = ROUNDS_PER_RUN, rng = Math.random) {
+export function createRun(
+  roundsPerRun = ROUNDS_PER_RUN,
+  rng = Math.random,
+  seed = generateRunSeed(rng),
+) {
   const targets = [];
   for (let i = 0; i < roundsPerRun; i += 1) {
     const prevTarget = i > 0 ? targets[i - 1] : null;
@@ -60,6 +109,7 @@ export function createRun(roundsPerRun = ROUNDS_PER_RUN, rng = Math.random) {
     userHsv: { ...NEUTRAL_USER_HSV },
     hasInteractedThisRound: false,
     startedAt: new Date().toISOString(),
+    seed,
   };
 }
 
@@ -132,6 +182,10 @@ export function aggregatePercent(committed) {
 export function buildFinishedSession(run) {
   return {
     aggregatePct: aggregatePercent(run.committed),
+    runMeta: {
+      seed: run.seed,
+      startedAt: run.startedAt,
+    },
     rounds: run.committed.map((r) => ({
       targetHsv: r.targetHsv,
       userHsv: r.userHsv,
@@ -199,6 +253,10 @@ export function hydrateRunFromDraft(draft) {
           userHsv.s !== NEUTRAL_USER_HSV.s ||
           userHsv.v !== NEUTRAL_USER_HSV.v,
     startedAt: typeof draft.startedAt === "string" ? draft.startedAt : new Date().toISOString(),
+    seed:
+      typeof draft.seed === "string" && /^\d{10}$/.test(draft.seed)
+        ? draft.seed
+        : generateRunSeed(),
   };
 }
 
@@ -218,6 +276,7 @@ export function runToDraftSnapshot(run) {
     userHsv: { ...run.userHsv },
     hasInteractedThisRound: Boolean(run.hasInteractedThisRound),
     startedAt: run.startedAt,
+    seed: run.seed,
     updatedAt: new Date().toISOString(),
   };
 }

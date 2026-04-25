@@ -51,11 +51,16 @@ describe("storage", () => {
       endedAt: "2026-01-01T00:00:00.000Z",
       aggregatePct: 77,
       rounds: [],
+      runMeta: { seed: "1234567890", startedAt: "2026-01-01T00:00:00.000Z" },
     });
     const list = loadSessions();
     expect(list).toHaveLength(1);
     expect(list[0].aggregatePct).toBe(77);
     expect(typeof list[0].id).toBe("string");
+    expect(list[0].runMeta).toEqual({
+      seed: "1234567890",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
   });
 
   it("saves and loads draft with schema", () => {

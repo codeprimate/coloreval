@@ -3,11 +3,14 @@ import {
   ROUNDS_PER_RUN,
   NEUTRAL_USER_HSV,
   createRun,
+  createSeededRng,
   currentRoundIndex,
   commitCurrentRound,
   aggregatePercent,
   buildFinishedSession,
+  generateRunSeed,
   hydrateRunFromDraft,
+  parseSeedFromHash,
   runToDraftSnapshot,
 } from "../src/run.js";
 
@@ -25,6 +28,15 @@ describe("createRun", () => {
   it("uses ROUNDS_PER_RUN by default", () => {
     const run = createRun(undefined, () => 0.4);
     expect(run.targets).toHaveLength(ROUNDS_PER_RUN);
+  });
+
+  it("uses provided seed and keeps targets deterministic", () => {
+    const seed = "1234567890";
+    const runA = createRun(3, createSeededRng(seed), seed);
+    const runB = createRun(3, createSeededRng(seed), seed);
+    expect(runA.seed).toBe(seed);
+    expect(runB.seed).toBe(seed);
+    expect(runA.targets).toEqual(runB.targets);
   });
 });
 
@@ -55,6 +67,7 @@ describe("aggregatePercent / buildFinishedSession", () => {
     const fin = buildFinishedSession(run);
     expect(fin.aggregatePct).toBe(50);
     expect(fin.rounds).toHaveLength(2);
+    expect(fin.runMeta.seed).toMatch(/^\d{10}$/);
   });
 });
 
@@ -70,6 +83,7 @@ describe("draft round-trip", () => {
     expect(restored.committed).toEqual(run.committed);
     expect(restored.userHsv).toEqual(run.userHsv);
     expect(restored.hasInteractedThisRound).toBe(true);
+    expect(restored.seed).toMatch(/^\d{10}$/);
   });
 
   it("infers slider interaction for legacy drafts", () => {
@@ -80,6 +94,7 @@ describe("draft round-trip", () => {
     const restored = hydrateRunFromDraft(snap);
     expect(restored).not.toBeNull();
     expect(restored.hasInteractedThisRound).toBe(true);
+    expect(restored.seed).toMatch(/^\d{10}$/);
   });
 
   it("returns null for invalid draft", () => {
@@ -101,5 +116,19 @@ describe("currentRoundIndex", () => {
     const run = createRun(1, () => 0.5);
     commitCurrentRound(run);
     expect(currentRoundIndex(run)).toBeNull();
+  });
+});
+
+describe("seed utilities", () => {
+  it("parses 10-digit seed from hash", () => {
+    expect(parseSeedFromHash("#1234567890")).toBe("1234567890");
+    expect(parseSeedFromHash("#seed=1234567890")).toBe("1234567890");
+    expect(parseSeedFromHash("#12345")).toBeNull();
+  });
+
+  it("generates 10-digit seed string", () => {
+    const seed = generateRunSeed(() => 0.1);
+    expect(seed).toHaveLength(10);
+    expect(seed).toMatch(/^\d{10}$/);
   });
 });

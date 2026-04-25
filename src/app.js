@@ -2,9 +2,12 @@ import { hsvToCssColor } from "./color.js";
 import {
   ROUNDS_PER_RUN,
   createRun,
+  createSeededRng,
   commitCurrentRound,
   buildFinishedSession,
+  generateRunSeed,
   hydrateRunFromDraft,
+  parseSeedFromHash,
   runToDraftSnapshot,
   currentRoundIndex,
   currentTargetHsv,
@@ -45,7 +48,7 @@ export function initApp(root) {
     lastResult: null,
     /** @type {string | null} */
     storageError: null,
-    /** @type {{ endedAt: string, aggregatePct: number, rounds: object[] } | null} */
+    /** @type {{ endedAt: string, aggregatePct: number, rounds: object[], runMeta?: { seed: string, startedAt?: string } } | null} */
     pendingSession: null,
     /** @type {number | null} */
     expandedHistoryIndex: null,
@@ -102,7 +105,9 @@ export function initApp(root) {
 
   function startNewRun() {
     clearDraft();
-    state.run = createRun(ROUNDS_PER_RUN);
+    const resolvedSeed = parseSeedFromHash(window.location.hash) ?? generateRunSeed();
+    const rng = createSeededRng(resolvedSeed);
+    state.run = createRun(ROUNDS_PER_RUN, rng, resolvedSeed);
     const res = saveDraft(runToDraftSnapshot(state.run));
     if (!res.ok) {
       state.storageError = res.error ?? "save";
@@ -113,12 +118,12 @@ export function initApp(root) {
 
   function finishRunToResults() {
     if (!state.run) return;
-    const { aggregatePct, rounds } = buildFinishedSession(state.run);
+    const { aggregatePct, rounds, runMeta } = buildFinishedSession(state.run);
     const endedAt = new Date().toISOString();
-    const append = appendSession({ endedAt, aggregatePct, rounds });
+    const append = appendSession({ endedAt, aggregatePct, rounds, runMeta });
     if (!append.ok) {
       state.storageError = append.error ?? "save";
-      state.pendingSession = { endedAt, aggregatePct, rounds };
+      state.pendingSession = { endedAt, aggregatePct, rounds, runMeta };
     } else {
       state.pendingSession = null;
     }
@@ -623,6 +628,7 @@ export function initApp(root) {
         endedAt: p.endedAt,
         aggregatePct: p.aggregatePct,
         rounds: p.rounds,
+        runMeta: p.runMeta,
       });
       if (append.ok) {
         state.storageError = null;

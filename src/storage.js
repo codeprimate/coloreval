@@ -6,7 +6,13 @@ export const LS_KEY_DRAFT = "coloreval_draft_v1";
 export const LS_KEY_PREFS = "coloreval_prefs_v1";
 
 /**
- * @typedef {{ id: string, endedAt: string, aggregatePct: number, rounds: import("./run.js").CommittedRound[] }} StoredSession
+ * @typedef {{
+ *   id: string,
+ *   endedAt: string,
+ *   aggregatePct: number,
+ *   rounds: import("./run.js").CommittedRound[],
+ *   runMeta?: { seed: string, startedAt?: string },
+ * }} StoredSession
  */
 
 /**
@@ -65,6 +71,17 @@ export function loadSessions() {
           endedAt: s.endedAt,
           aggregatePct: s.aggregatePct,
           rounds: s.rounds,
+          runMeta:
+            s.runMeta &&
+            typeof s.runMeta === "object" &&
+            typeof s.runMeta.seed === "string" &&
+            /^\d{10}$/.test(s.runMeta.seed)
+              ? {
+                  seed: s.runMeta.seed,
+                  startedAt:
+                    typeof s.runMeta.startedAt === "string" ? s.runMeta.startedAt : undefined,
+                }
+              : undefined,
         });
       }
     }
@@ -86,6 +103,7 @@ export function appendSession(session) {
     endedAt: session.endedAt,
     aggregatePct: session.aggregatePct,
     rounds: session.rounds,
+    runMeta: session.runMeta,
   });
   return writeJson(LS_KEY_SESSIONS, {
     schemaVersion: STORAGE_SCHEMA_VERSION,
