@@ -16,7 +16,7 @@ nvm use   # or: nvm install
 npm install
 ```
 
-Before merging, run `npm test && npm run build` (and fix any lint issues).
+Before merging, run `npm run lint && npm run format:check && npm test && npm run build`.
 
 ## Scripts
 
