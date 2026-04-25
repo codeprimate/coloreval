@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { matchPercentHsv } from "../src/color.js";
 import {
   ROUNDS_PER_RUN,
   NEUTRAL_USER_HSV,
@@ -37,6 +38,15 @@ describe("createRun", () => {
     expect(runA.seed).toBe(seed);
     expect(runB.seed).toBe(seed);
     expect(runA.targets).toEqual(runB.targets);
+  });
+
+  it("prefers wildly different adjacent targets", () => {
+    const seed = "1234567890";
+    const run = createRun(8, createSeededRng(seed), seed);
+    const adjacentMatchPcts = run.targets
+      .slice(1)
+      .map((target, i) => matchPercentHsv(run.targets[i], target));
+    expect(Math.max(...adjacentMatchPcts)).toBeLessThanOrEqual(35);
   });
 });
 

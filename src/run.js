@@ -3,8 +3,8 @@ import { matchPercentHsv, randomTargetHsv } from "./color.js";
 /** Number of rounds per run in schema version 1. */
 export const ROUNDS_PER_RUN = 5;
 export const RUN_SEED_DIGITS = 10;
-const MAX_TARGET_RETRIES = 12;
-const MAX_SIMILAR_TARGET_MATCH_PCT = 85;
+const TARGET_VARIETY_CANDIDATES = 12;
+const STRONGLY_DIFFERENT_TARGET_MATCH_PCT = 35;
 
 /**
  * Slider values applied after each committed round so every round starts from
@@ -56,23 +56,42 @@ export function createSeededRng(seed) {
 }
 
 /**
- * Picks a random target, retrying if it is too similar to the previous target.
- * This keeps rounds visually varied without risking infinite loops with fixed RNGs.
+ * Picks a target that is strongly different from the previous target.
+ *
+ * Strategy:
+ * - Sample multiple random candidates
+ * - Keep the candidate with the *lowest* perceptual match score vs the previous
+ * - Return early if we find one below a "strongly different" cutoff
+ *
+ * This produces more dramatic round-to-round color changes while staying
+ * deterministic for seeded runs and bounded in CPU time.
  * @param {{ h: number, s: number, v: number } | null} prevTarget
  * @param {() => number} rng
  */
 function pickVariedTarget(prevTarget, rng) {
-  let target = randomTargetHsv(rng);
-  if (!prevTarget) return target;
-  let attempts = 0;
-  while (
-    attempts < MAX_TARGET_RETRIES &&
-    matchPercentHsv(prevTarget, target) >= MAX_SIMILAR_TARGET_MATCH_PCT
-  ) {
-    target = randomTargetHsv(rng);
-    attempts += 1;
+  if (!prevTarget) {
+    return randomTargetHsv(rng);
   }
-  return target;
+
+  let bestTarget = randomTargetHsv(rng);
+  let lowestMatchPct = matchPercentHsv(prevTarget, bestTarget);
+  if (lowestMatchPct <= STRONGLY_DIFFERENT_TARGET_MATCH_PCT) {
+    return bestTarget;
+  }
+
+  for (let i = 1; i < TARGET_VARIETY_CANDIDATES; i += 1) {
+    const candidate = randomTargetHsv(rng);
+    const candidateMatchPct = matchPercentHsv(prevTarget, candidate);
+    if (candidateMatchPct < lowestMatchPct) {
+      bestTarget = candidate;
+      lowestMatchPct = candidateMatchPct;
+      if (lowestMatchPct <= STRONGLY_DIFFERENT_TARGET_MATCH_PCT) {
+        break;
+      }
+    }
+  }
+
+  return bestTarget;
 }
 
 /**
