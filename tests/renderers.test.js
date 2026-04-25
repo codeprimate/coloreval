@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockLoadSessions, mockSelectTopSessionsByScore } = vi.hoisted(() => ({
   mockLoadSessions: vi.fn(),
@@ -23,6 +23,23 @@ function mkRound() {
     roundScore: 50,
   };
 }
+
+describe("createRenderers renderHome", () => {
+  beforeEach(() => {
+    vi.stubGlobal("window", { location: { search: "", hash: "" } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders the home intro hook", () => {
+    const state = {};
+    const { renderHome } = createRenderers({ state });
+    const html = renderHome();
+    expect(html).toMatch(/<p\b[^>]*\bclass="[^"]*\bhome-intro\b[^"]*"/);
+  });
+});
 
 describe("createRenderers renderHistory actions", () => {
   beforeEach(() => {

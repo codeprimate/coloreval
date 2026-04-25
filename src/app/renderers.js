@@ -69,6 +69,7 @@ export function createRenderers({ state }) {
           <div class="home-hero">
             <div class="wordmark">
               <h1 class="title">coloreval</h1>
+              <p class="home-intro">test your vision<br>match the colors</p>
               ${hint}
             </div>
             <div class="home-icon-wrap">
