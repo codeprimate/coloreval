@@ -405,6 +405,7 @@ export function createRenderers({ state }) {
         const isExpanded = state.expandedHistoryIndex === historyIndex;
         const canRetry = Boolean(s.runMeta && typeof s.runMeta.seed === "string");
         const challengeMeta = s.runMeta && s.runMeta.challenge ? s.runMeta.challenge : null;
+        const canShare = !challengeMeta;
         const challengerName =
           challengeMeta && typeof challengeMeta.authorName === "string"
             ? challengeMeta.authorName
@@ -480,11 +481,15 @@ export function createRenderers({ state }) {
             </button>
             <div class="history-row-actions">
               ${
-                challengeMeta
-                  ? ""
-                  : `<button type="button" class="btn--icon history-share-btn" data-action="history-share" data-history-index="${historyIndex}" aria-label="Share this challenge" title="Share this challenge">🥊</button>`
+                canShare
+                  ? `<button type="button" class="btn--icon history-share-btn" data-action="history-share" data-history-index="${historyIndex}" aria-label="Share this challenge" title="Share this challenge">🥊</button>`
+                  : ""
               }
-              <button type="button" class="btn--icon history-retry-btn" data-action="history-retry" data-history-index="${historyIndex}" ${canRetry ? "" : "disabled"} aria-label="Retry this run" title="${canRetry ? "Retry" : "Retry unavailable"}">↻</button>
+              ${
+                canRetry
+                  ? `<button type="button" class="btn--icon history-retry-btn" data-action="history-retry" data-history-index="${historyIndex}" aria-label="Retry this run" title="Retry">↻</button>`
+                  : ""
+              }
               <span class="tabular history-pct">${s.aggregatePct}%</span>
             </div>
             ${
