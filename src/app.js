@@ -370,6 +370,7 @@ export function initApp(root) {
           </div>
           <div class="stack stack--actions" style="width:100%">
             <button type="button" class="btn btn--primary" data-action="again">Play again</button>
+            <button type="button" class="btn btn--outline" data-action="history">History</button>
             <button type="button" class="btn btn--outline" data-action="home">Home</button>
           </div>
         </main>
