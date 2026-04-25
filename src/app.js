@@ -18,6 +18,7 @@ import {
   saveDraft,
   savePrefs,
 } from "./storage.js";
+import { selectTopSessionsByScore } from "./history.js";
 import {
   transitionScreen,
   wireButtonAnimations,
@@ -27,7 +28,7 @@ import {
 } from "./animations.js";
 
 /** @typedef {'home' | 'play' | 'results' | 'history'} Screen */
-/** @typedef {"forward"|"back"|"up"} TransitionDirection */
+/** @typedef {"forward"|"back"|"up"|"none"} TransitionDirection */
 
 /**
  * @param {HTMLElement | null} root
@@ -187,6 +188,9 @@ export function initApp(root) {
       root.innerHTML = banner + body;
       bindScreenHandlers();
       animateRoundAdvance();
+    } else if (direction === "none") {
+      root.innerHTML = banner + body;
+      bindScreenHandlers();
     } else {
       await transitionScreen(() => {
         root.innerHTML = banner + body;
@@ -247,7 +251,7 @@ export function initApp(root) {
           </div>
           <div class="stack stack--actions">
             <button type="button" class="btn btn--primary" data-action="play">Play</button>
-            <button type="button" class="btn btn--outline" data-action="history">History</button>
+            <button type="button" class="btn btn--outline" data-action="history">Top 10</button>
           </div>
         </main>
       </div>
@@ -370,7 +374,7 @@ export function initApp(root) {
           </div>
           <div class="stack stack--actions" style="width:100%">
             <button type="button" class="btn btn--primary" data-action="again">Play again</button>
-            <button type="button" class="btn btn--outline" data-action="history">History</button>
+            <button type="button" class="btn btn--outline" data-action="history">Top 10</button>
             <button type="button" class="btn btn--outline" data-action="home">Home</button>
           </div>
         </main>
@@ -379,7 +383,7 @@ export function initApp(root) {
   }
 
   function renderHistory() {
-    const sessions = loadSessions().slice().reverse();
+    const sessions = selectTopSessionsByScore(loadSessions(), 10);
     if (sessions.length === 0) {
       return `
         <div class="shell shell--history">
@@ -387,11 +391,11 @@ export function initApp(root) {
             <div class="topbar__left">
               <button type="button" class="btn--back" data-action="home">← Back</button>
             </div>
-            <div class="topbar__center">History</div>
+            <div class="topbar__center">Top 10</div>
             <div class="topbar__right"></div>
           </div>
           <main class="main">
-            <p class="muted">No runs yet.</p>
+            <p class="muted">No Top 10 runs yet.</p>
             <button type="button" class="btn btn--primary" data-action="play">Play your first game</button>
           </main>
         </div>
@@ -434,19 +438,17 @@ export function initApp(root) {
               <span class="history-date">${escapeHtml(dateStr)}</span>
               <span class="tabular history-pct">${s.aggregatePct}%</span>
             </button>
-            ${
-              isExpanded
-                ? `<div class="history-detail">
-                    <div class="history-round-columns" aria-hidden="true">
-                      <span></span>
-                      <span class="history-round-column-label">Target</span>
-                      <span></span>
-                      <span class="history-round-column-label">Yours</span>
-                    </div>
-                    <ul class="history-round-list">${roundRows}</ul>
-                  </div>`
-                : ""
-            }
+            <div class="history-detail-wrap" aria-hidden="${isExpanded ? "false" : "true"}">
+              <div class="history-detail">
+                <div class="history-round-columns" aria-hidden="true">
+                  <span></span>
+                  <span class="history-round-column-label">Target</span>
+                  <span></span>
+                  <span class="history-round-column-label">Yours</span>
+                </div>
+                <ul class="history-round-list">${roundRows}</ul>
+              </div>
+            </div>
           </li>
         `;
       })
@@ -458,7 +460,7 @@ export function initApp(root) {
           <div class="topbar__left">
             <button type="button" class="btn--back" data-action="home">← Back</button>
           </div>
-          <div class="topbar__center">History</div>
+          <div class="topbar__center">Top 10</div>
           <div class="topbar__right"></div>
         </div>
         <main class="main">
@@ -532,6 +534,32 @@ export function initApp(root) {
     }, 1300);
   }
 
+  /**
+   * Toggle a history row in place so CSS transitions can animate.
+   * @param {HTMLElement} rowButton
+   * @param {number} index
+   */
+  function toggleHistoryRowInPlace(rowButton, index) {
+    const allItems = root.querySelectorAll(".history-item");
+    allItems.forEach((itemEl, itemIndex) => {
+      if (!(itemEl instanceof HTMLElement)) return;
+      const rowEl = itemEl.querySelector(".history-row");
+      const detailWrapEl = itemEl.querySelector(".history-detail-wrap");
+      const isTarget = itemIndex === index;
+      const shouldExpand = isTarget && state.expandedHistoryIndex !== index;
+      itemEl.classList.toggle("history-item--expanded", shouldExpand);
+      if (rowEl instanceof HTMLElement) {
+        rowEl.setAttribute("aria-expanded", shouldExpand ? "true" : "false");
+      }
+      if (detailWrapEl instanceof HTMLElement) {
+        detailWrapEl.setAttribute("aria-hidden", shouldExpand ? "false" : "true");
+      }
+    });
+    state.expandedHistoryIndex = state.expandedHistoryIndex === index ? null : index;
+    // Keep focus on clicked control for keyboard users after DOM class updates.
+    rowButton.focus();
+  }
+
   /** @param {Event} e */
   function onActionClick(e) {
     const t = e.target;
@@ -564,8 +592,7 @@ export function initApp(root) {
       const indexStr = actionEl.dataset.historyIndex;
       const index = Number(indexStr);
       if (!Number.isInteger(index)) return;
-      state.expandedHistoryIndex = state.expandedHistoryIndex === index ? null : index;
-      render("forward");
+      toggleHistoryRowInPlace(actionEl, index);
       return;
     }
     if (action === "commit") {
