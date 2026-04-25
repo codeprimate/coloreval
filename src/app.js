@@ -237,7 +237,7 @@ export function initApp(root) {
             <div class="home-icon-wrap">
               <img
                 class="home-icon"
-                src="/android-chrome-192x192.png"
+                src="./android-chrome-192x192.png"
                 alt=""
                 width="192"
                 height="192"
@@ -277,7 +277,7 @@ export function initApp(root) {
           <div class="topbar__left">
             <button type="button" class="btn--back btn--back-icon" data-action="quit" aria-label="Quit run">
               <span aria-hidden="true">←</span>
-              <img src="/favicon-32x32.png" alt="" width="18" height="18" decoding="async" />
+              <img src="./favicon-32x32.png" alt="" width="18" height="18" decoding="async" />
               <span class="visually-hidden">Quit</span>
             </button>
           </div>
