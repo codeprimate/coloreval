@@ -46,6 +46,9 @@ describe("createRenderers renderHistory actions", () => {
     const html = renderHistory();
 
     expect(html).not.toContain('data-action="history-retry"');
+    expect(html).toContain("history-round-dual");
+    expect(html).toContain("history-round-dual__pct");
+    expect(html).not.toContain("history-round-column-label");
   });
 
   it("omits share action for challenge runs", () => {
@@ -72,5 +75,47 @@ describe("createRenderers renderHistory actions", () => {
     const html = renderHistory();
 
     expect(html).not.toContain('data-action="history-share"');
+    expect(html).toContain("history-round-row--challenge-columns");
+    expect(html).toContain("history-round-columns-header");
+    expect(html).toContain(">You</span>");
+  });
+});
+
+describe("createRenderers renderResults round breakdown", () => {
+  it("solo finish uses dual-layout round rows", () => {
+    const state = {
+      lastResult: {
+        aggregatePct: 72,
+        rounds: [mkRound()],
+        runMeta: {},
+      },
+    };
+    const { renderResults } = createRenderers({ state });
+    const html = renderResults();
+    expect(html).toContain("history-round-row--dual-layout");
+    expect(html).toContain("history-round-dual__pct");
+    expect(html).not.toContain("history-round-columns-header");
+  });
+
+  it("challenge finish uses two dual columns and trophies row", () => {
+    const state = {
+      lastResult: {
+        aggregatePct: 85,
+        rounds: [mkRound()],
+        runMeta: {
+          challenge: {
+            authorName: "Pat",
+            authorScore: 70,
+            challengerRounds: [{ userHsv: { h: 20, s: 50, v: 50 }, roundScore: 60 }],
+          },
+        },
+      },
+    };
+    const { renderResults } = createRenderers({ state });
+    const html = renderResults();
+    expect(html).toContain("history-round-row--challenge-columns");
+    expect(html).toContain("history-round-awards--challenge-columns");
+    expect(html).toContain("history-round-columns-header");
+    expect(html).toContain("history-round-totals--challenge-columns");
   });
 });

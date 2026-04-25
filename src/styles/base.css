@@ -1026,23 +1026,11 @@ body {
   gap: var(--space-2);
 }
 
-.history-round-columns {
+.history-round-awards--challenge-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 3.1rem minmax(0, 1fr);
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
   align-items: center;
-  column-gap: var(--space-2);
-  margin-bottom: var(--space-1);
-}
-
-.history-round-columns--challenge {
-  grid-template-columns: minmax(0, 1fr) 3.1rem minmax(0, 1fr) 3.1rem minmax(0, 1fr);
-}
-
-.history-round-awards--challenge {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 3.1rem minmax(0, 1fr) 3.1rem minmax(0, 1fr);
-  align-items: center;
-  column-gap: var(--space-2);
   margin-bottom: 0.15rem;
 }
 
@@ -1069,19 +1057,102 @@ body {
   column-gap: var(--space-2);
 }
 
-.history-round-row--challenge {
-  grid-template-columns: minmax(0, 1fr) 3.1rem minmax(0, 1fr) 3.1rem minmax(0, 1fr);
+/* History expanded detail: target ring + centered "yours", no gap; % overlaid */
+.history-round-row--dual-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0;
+}
+
+.history-round-row--challenge-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.history-round-challenge-column {
+  min-width: 0;
+}
+
+.history-round-columns-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.history-round-columns-header .history-round-column-label {
+  text-align: center;
+}
+
+.history-round-dual {
+  position: relative;
+  width: 100%;
+  height: 2.35rem;
+  border-radius: var(--radius);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.history-round-dual__target {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgb(0 0 0 / 0.12);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2);
+}
+
+.history-round-dual__yours {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: 50%;
+  height: min(76%, 1.65rem);
+  border-radius: var(--radius-sm);
+  border: none;
+  box-shadow: none;
+  z-index: 1;
+}
+
+.history-round-dual__pct {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 2px #000,
+    0 0 6px #000,
+    0 1px 2px #000,
+    0 -1px 2px #000,
+    1px 0 2px #000,
+    -1px 0 2px #000;
+  pointer-events: none;
+}
+
+.history-round-totals--challenge-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.history-round-totals--challenge-columns .history-round-total-pct {
+  text-align: center;
+  justify-self: stretch;
 }
 
 .history-round-totals {
   margin-top: var(--space-2);
-}
-
-.history-round-totals--challenge {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 3.1rem minmax(0, 1fr) 3.1rem minmax(0, 1fr);
-  align-items: center;
-  column-gap: var(--space-2);
 }
 
 .history-round-total-pct {
@@ -1112,6 +1183,14 @@ body {
   box-shadow:
     0 0 0 1px rgb(220 38 38 / 0.22),
     inset 0 1px 0 rgb(255 255 255 / 0.2);
+}
+
+/* Inner pick in history dual: no swatch chrome (later rules above would win otherwise) */
+.history-round-dual__yours.history-round-swatch,
+.history-round-dual__yours.history-round-swatch--winner,
+.history-round-dual__yours.history-round-swatch--loser {
+  border: none;
+  box-shadow: none;
 }
 
 .history-round-score {

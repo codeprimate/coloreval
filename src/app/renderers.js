@@ -9,6 +9,16 @@ import { loadPrefs, loadSessions } from "../storage.js";
 import { selectTopSessionsByScore } from "../history.js";
 import { escapeHtml, hsvToRangeValues } from "./utils.js";
 
+/** Non-text symbols shown in UI templates. */
+const GLYPHS = {
+  backArrow: "\u2190",
+  sliderHintArrow: "\u279C",
+  trophy: "\u{1F3C6}",
+  mobileShare: "\u{1F4F1}",
+  copyLink: "\u29C9",
+  retry: "\u21BB",
+};
+
 /**
  * @param {{ state: object }} deps
  */
@@ -108,7 +118,7 @@ export function createRenderers({ state }) {
         <div class="topbar">
           <div class="topbar__left">
             <button type="button" class="btn--back btn--back-icon" data-action="quit" aria-label="Quit run">
-              <span aria-hidden="true">←</span>
+              <span aria-hidden="true">${GLYPHS.backArrow}</span>
               <span class="visually-hidden">Quit</span>
             </button>
           </div>
@@ -131,21 +141,21 @@ export function createRenderers({ state }) {
           </div>
           <form class="sliders" id="play-form" novalidate>
             <div class="field">
-              <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">➜</span>
+              <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">${GLYPHS.sliderHintArrow}</span>
               <div class="field__control">
                 <label for="hue">Hue</label>
                 <input id="hue" name="hue" type="range" min="0" max="359" value="${hue}" />
               </div>
             </div>
             <div class="field">
-              <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">➜</span>
+              <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">${GLYPHS.sliderHintArrow}</span>
               <div class="field__control">
                 <label for="saturation">Saturation</label>
                 <input id="saturation" name="saturation" type="range" min="0" max="100" value="${sat}" />
               </div>
             </div>
             <div class="field">
-              <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">➜</span>
+              <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">${GLYPHS.sliderHintArrow}</span>
               <div class="field__control">
                 <label for="value">Value</label>
                 <input id="value" name="value" type="range" min="0" max="100" value="${val}" />
@@ -159,6 +169,70 @@ export function createRenderers({ state }) {
         </main>
       </div>
     `;
+  }
+
+  /**
+   * Solo: nested target + yours dual per round. Challenge: two dual columns (you vs author).
+   * @param {Array<{ targetHsv: object; userHsv: object; roundScore: number }>} rounds
+   * @param {{
+   *   showChallengerColumn: boolean,
+   *   challengerRounds: Array<{ userHsv: object; roundScore: number }> | null,
+   *   challengerName: string | null,
+   * }} ctx
+   */
+  function buildDualStyleRoundRows(rounds, ctx) {
+    const { showChallengerColumn, challengerRounds, challengerName } = ctx;
+    return rounds
+      .map((round, roundIndex) => {
+        const targetCss = hsvToCssColor(round.targetHsv);
+        const userCss = hsvToCssColor(round.userHsv);
+        const challengerRound =
+          showChallengerColumn && challengerRounds ? challengerRounds[roundIndex] : null;
+        const yourWinnerClass =
+          challengerRound && round.roundScore > challengerRound.roundScore
+            ? " history-round-swatch--winner"
+            : "";
+        const challengerLoserClass =
+          challengerRound && challengerRound.roundScore > round.roundScore
+            ? " history-round-swatch--loser"
+            : "";
+        const youDual = `
+                <div
+                  class="history-round-dual"
+                  role="img"
+                  aria-label="Round ${roundIndex + 1} (you): target color with your pick; ${round.roundScore}% match"
+                >
+                  <span class="history-round-dual__target" style="background-color: ${targetCss}"></span>
+                  <span class="history-round-dual__yours history-round-swatch${yourWinnerClass}" style="background-color: ${userCss}"></span>
+                  <span class="history-round-dual__pct tabular">${round.roundScore}%</span>
+                </div>
+              `;
+        if (showChallengerColumn && challengerRound && challengerName) {
+          const challengerDual = `
+                <div
+                  class="history-round-dual"
+                  role="img"
+                  aria-label="Round ${roundIndex + 1} (${escapeHtml(challengerName)}): same target with their pick; ${challengerRound.roundScore}% match"
+                >
+                  <span class="history-round-dual__target" style="background-color: ${targetCss}"></span>
+                  <span class="history-round-dual__yours history-round-swatch${challengerLoserClass}" style="background-color: ${hsvToCssColor(challengerRound.userHsv)}"></span>
+                  <span class="history-round-dual__pct tabular">${challengerRound.roundScore}%</span>
+                </div>
+              `;
+          return `
+              <li class="history-round-row history-round-row--challenge-columns">
+                <div class="history-round-challenge-column">${youDual}</div>
+                <div class="history-round-challenge-column">${challengerDual}</div>
+              </li>
+            `;
+        }
+        return `
+              <li class="history-round-row history-round-row--dual-layout">
+                ${youDual}
+              </li>
+            `;
+      })
+      .join("");
   }
 
   function renderResults() {
@@ -197,43 +271,16 @@ export function createRenderers({ state }) {
           `<span class="round-dot" style="--dot-score: ${rounds[i].roundScore}; --i: ${i}" title="Round ${i + 1}: ${rounds[i].roundScore}%"></span>`,
       )
       .join("");
-    const roundRows = rounds
-      .map((round, roundIndex) => {
-        const targetCss = hsvToCssColor(round.targetHsv);
-        const userCss = hsvToCssColor(round.userHsv);
-        const challengerRound = showChallengerColumn ? challengerRounds[roundIndex] : null;
-        const yourWinnerClass =
-          challengerRound && round.roundScore > challengerRound.roundScore
-            ? " history-round-swatch--winner"
-            : "";
-        const challengerLoserClass =
-          challengerRound && challengerRound.roundScore > round.roundScore
-            ? " history-round-swatch--loser"
-            : "";
-        const challengerCell = showChallengerColumn
-          ? `
-            <span class="history-round-score tabular">${challengerRound.roundScore}%</span>
-            <span class="history-round-swatch${challengerLoserClass}" style="background-color: ${hsvToCssColor(challengerRound.userHsv)}" aria-label="Round ${roundIndex + 1} challenger color"></span>
-          `
-          : "";
-        return `
-          <li class="history-round-row ${showChallengerColumn ? "history-round-row--challenge" : ""}">
-            <span class="history-round-swatch" style="background-color: ${targetCss}" aria-label="Round ${roundIndex + 1} target color"></span>
-            <span class="history-round-score tabular">${round.roundScore}%</span>
-            <span class="history-round-swatch${yourWinnerClass}" style="background-color: ${userCss}" aria-label="Round ${roundIndex + 1} your color"></span>
-            ${challengerCell}
-          </li>
-        `;
-      })
-      .join("");
+    const roundRows = buildDualStyleRoundRows(rounds, {
+      showChallengerColumn,
+      challengerRounds: showChallengerColumn ? challengerRounds : null,
+      challengerName: showChallengerColumn ? challengerName : null,
+    });
     const challengeTotalsRow =
       showChallengerColumn && typeof challengerTotalPct === "number"
         ? `
-            <div class="history-round-totals history-round-totals--challenge" aria-label="Challenge totals">
-              <span></span>
-              <span></span>
+            <div class="history-round-totals history-round-totals--challenge-columns" aria-label="Challenge totals">
               <span class="history-round-total-pct tabular">${aggregatePct}%</span>
-              <span></span>
               <span class="history-round-total-pct tabular">${challengerTotalPct}%</span>
             </div>
           `
@@ -243,37 +290,32 @@ export function createRenderers({ state }) {
       <div class="shell shell--results">
         <main class="main main--results">
           <p class="score-line">
-            ${showWinnerWreaths ? '<span class="score-wreath" aria-hidden="true">🏆</span>' : ""}
+            ${showWinnerWreaths ? `<span class="score-wreath" aria-hidden="true">${GLYPHS.trophy}</span>` : ""}
             <span class="score tabular">${aggregatePct}</span>
             <span class="score-meta">
               <span class="score-brand title">coloreval</span>
               <span class="score-suffix">% match</span>
             </span>
-            ${showWinnerWreaths ? '<span class="score-wreath" aria-hidden="true">🏆</span>' : ""}
+            ${showWinnerWreaths ? `<span class="score-wreath" aria-hidden="true">${GLYPHS.trophy}</span>` : ""}
           </p>
           <div class="round-strip" aria-hidden="true">${dots}</div>
-          <div class="history-detail" style="width:100%">
+          <div class="history-detail results-round-breakdown" style="width:100%">
             ${
               showChallengerColumn
-                ? `<div class="history-round-awards history-round-awards--challenge" aria-hidden="true">
-                     <span></span>
-                     <span></span>
-                     <span class="history-round-award">${winnerColumn === "yours" ? "🏆" : ""}</span>
-                     <span></span>
-                     <span class="history-round-award">${winnerColumn === "challenger" ? "🏆" : ""}</span>
+                ? `<div class="history-round-awards history-round-awards--challenge-columns" aria-hidden="true">
+                     <span class="history-round-award">${winnerColumn === "yours" ? GLYPHS.trophy : ""}</span>
+                     <span class="history-round-award">${winnerColumn === "challenger" ? GLYPHS.trophy : ""}</span>
                    </div>`
                 : ""
             }
-            <div class="history-round-columns ${showChallengerColumn ? "history-round-columns--challenge" : ""}" aria-hidden="true">
-              <span class="history-round-column-label">Target</span>
-              <span></span>
-              <span class="history-round-column-label">Yours</span>
-              ${
-                showChallengerColumn
-                  ? `<span></span><span class="history-round-column-label">${escapeHtml(challengerName)}</span>`
-                  : ""
-              }
-            </div>
+            ${
+              showChallengerColumn
+                ? `<div class="history-round-columns-header" aria-hidden="true">
+                    <span class="history-round-column-label">You</span>
+                    <span class="history-round-column-label">${escapeHtml(challengerName)}</span>
+                  </div>`
+                : ""
+            }
             <ul class="history-round-list">${roundRows}</ul>
             ${challengeTotalsRow}
           </div>
@@ -310,8 +352,8 @@ export function createRenderers({ state }) {
       ? `
       <div class="challenge-link-row">
         <a class="challenge-link-title" href="${state.challengeShare.url}" target="_blank" rel="noopener noreferrer">coloreval Challenge</a>
-        <a class="btn--icon challenge-copy-btn challenge-sms-link" href="${smsHref}" aria-label="Share challenge via text message">📱</a>
-        <button type="button" class="btn--icon challenge-copy-btn" data-action="challenge-copy" aria-label="Copy challenge link">⧉</button>
+        <a class="btn--icon challenge-copy-btn challenge-sms-link" href="${smsHref}" aria-label="Share challenge via text message">${GLYPHS.mobileShare}</a>
+        <button type="button" class="btn--icon challenge-copy-btn" data-action="challenge-copy" aria-label="Copy challenge link">${GLYPHS.copyLink}</button>
       </div>
     `
       : "";
@@ -349,7 +391,7 @@ export function createRenderers({ state }) {
       <div class="shell shell--results shell--challenge-share">
         <div class="topbar topbar--share">
           <div class="topbar__left">
-            <button type="button" class="btn--back" data-action="results">← Back</button>
+            <button type="button" class="btn--back" data-action="results">${GLYPHS.backArrow} Back</button>
           </div>
           <div class="topbar__title">Share challenge</div>
           <div class="topbar__right-spacer" aria-hidden="true"></div>
@@ -380,7 +422,7 @@ export function createRenderers({ state }) {
         <div class="shell shell--history">
           <div class="topbar">
             <div class="topbar__left">
-              <button type="button" class="btn--back" data-action="home">← Back</button>
+              <button type="button" class="btn--back" data-action="home">${GLYPHS.backArrow} Back</button>
             </div>
             <div class="topbar__center">Top 10</div>
             <div class="topbar__right title">coloreval</div>
@@ -421,47 +463,17 @@ export function createRenderers({ state }) {
           challengeMeta && typeof challengeMeta.authorScore === "number"
             ? challengeMeta.authorScore
             : null;
-        const challengeBadgeIcon =
-          typeof challengerTotalPct === "number" && s.aggregatePct > challengerTotalPct
-            ? "🏆"
-            : "🥊";
-        const roundRows = s.rounds
-          .map((round, roundIndex) => {
-            const targetCss = hsvToCssColor(round.targetHsv);
-            const userCss = hsvToCssColor(round.userHsv);
-            const challengerRound = showChallengerColumn ? challengerRounds[roundIndex] : null;
-            const yourWinnerClass =
-              challengerRound && round.roundScore > challengerRound.roundScore
-                ? " history-round-swatch--winner"
-                : "";
-            const challengerLoserClass =
-              challengerRound && challengerRound.roundScore > round.roundScore
-                ? " history-round-swatch--loser"
-                : "";
-            const challengerCell = showChallengerColumn
-              ? `
-                <span class="history-round-score tabular">${challengerRound.roundScore}%</span>
-                <span class="history-round-swatch${challengerLoserClass}" style="background-color: ${hsvToCssColor(challengerRound.userHsv)}" aria-label="Round ${roundIndex + 1} challenger color"></span>
-              `
-              : "";
-            return `
-              <li class="history-round-row ${showChallengerColumn ? "history-round-row--challenge" : ""}">
-                <span class="history-round-swatch" style="background-color: ${targetCss}" aria-label="Round ${roundIndex + 1} target color"></span>
-                <span class="history-round-score tabular">${round.roundScore}%</span>
-                <span class="history-round-swatch${yourWinnerClass}" style="background-color: ${userCss}" aria-label="Round ${roundIndex + 1} your color"></span>
-                ${challengerCell}
-              </li>
-            `;
-          })
-          .join("");
+        const challengeBadgeIcon = GLYPHS.trophy;
+        const roundRows = buildDualStyleRoundRows(s.rounds, {
+          showChallengerColumn,
+          challengerRounds: showChallengerColumn ? challengerRounds : null,
+          challengerName: showChallengerColumn ? challengerName : null,
+        });
         const challengeTotalsRow =
           showChallengerColumn && typeof challengerTotalPct === "number"
             ? `
-                <div class="history-round-totals history-round-totals--challenge" aria-label="Challenge totals">
-                  <span></span>
-                  <span></span>
+                <div class="history-round-totals history-round-totals--challenge-columns" aria-label="Challenge totals">
                   <span class="history-round-total-pct tabular">${s.aggregatePct}%</span>
-                  <span></span>
                   <span class="history-round-total-pct tabular">${challengerTotalPct}%</span>
                 </div>
               `
@@ -482,12 +494,12 @@ export function createRenderers({ state }) {
             <div class="history-row-actions">
               ${
                 canShare
-                  ? `<button type="button" class="btn--icon history-share-btn" data-action="history-share" data-history-index="${historyIndex}" aria-label="Share this challenge" title="Share this challenge">🥊</button>`
+                  ? `<button type="button" class="btn--icon history-share-btn" data-action="history-share" data-history-index="${historyIndex}" aria-label="Share this challenge" title="Share this challenge">${GLYPHS.trophy}</button>`
                   : ""
               }
               ${
                 canRetry
-                  ? `<button type="button" class="btn--icon history-retry-btn" data-action="history-retry" data-history-index="${historyIndex}" aria-label="Retry this run" title="Retry">↻</button>`
+                  ? `<button type="button" class="btn--icon history-retry-btn" data-action="history-retry" data-history-index="${historyIndex}" aria-label="Retry this run" title="Retry">${GLYPHS.retry}</button>`
                   : ""
               }
               <span class="tabular history-pct">${s.aggregatePct}%</span>
@@ -499,16 +511,14 @@ export function createRenderers({ state }) {
             }
             <div class="history-detail-wrap" aria-hidden="${isExpanded ? "false" : "true"}">
               <div class="history-detail">
-                <div class="history-round-columns ${showChallengerColumn ? "history-round-columns--challenge" : ""}" aria-hidden="true">
-                  <span class="history-round-column-label">Target</span>
-                  <span></span>
-                  <span class="history-round-column-label">Yours</span>
-                  ${
-                    showChallengerColumn
-                      ? `<span></span><span class="history-round-column-label">${escapeHtml(challengerName)}</span>`
-                      : ""
-                  }
-                </div>
+                ${
+                  showChallengerColumn
+                    ? `<div class="history-round-columns-header" aria-hidden="true">
+                    <span class="history-round-column-label">You</span>
+                    <span class="history-round-column-label">${escapeHtml(challengerName)}</span>
+                  </div>`
+                    : ""
+                }
                 <ul class="history-round-list">${roundRows}</ul>
                 ${challengeTotalsRow}
               </div>
@@ -522,7 +532,7 @@ export function createRenderers({ state }) {
       <div class="shell shell--history">
         <div class="topbar">
           <div class="topbar__left">
-            <button type="button" class="btn--back" data-action="home">← Back</button>
+            <button type="button" class="btn--back" data-action="home">${GLYPHS.backArrow} Back</button>
           </div>
           <div class="topbar__center">Top 10</div>
           <div class="topbar__right title">coloreval</div>
