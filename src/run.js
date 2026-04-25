@@ -3,6 +3,8 @@ import { matchPercentHsv, randomTargetHsv } from "./color.js";
 /** Number of rounds per run in schema version 1. */
 export const ROUNDS_PER_RUN = 5;
 export const RUN_SEED_DIGITS = 10;
+export const CHALLENGE_PAYLOAD_VERSION = 1;
+export const CHALLENGE_AUTHOR_NAME_MAX_LEN = 24;
 const TARGET_VARIETY_CANDIDATES = 12;
 const STRONGLY_DIFFERENT_TARGET_MATCH_PCT = 35;
 
@@ -27,6 +29,257 @@ export function parseSeedFromHash(hash) {
 }
 
 /**
+ * @param {string} search
+ * @returns {string | null}
+ */
+export function parseChallengeParamFromSearch(search) {
+  if (typeof search !== "string") return null;
+  const raw = search.startsWith("?") ? search.slice(1) : search;
+  if (!raw) return null;
+  const params = new URLSearchParams(raw);
+  const value = params.get("c");
+  if (!value) return null;
+  return value.trim() || null;
+}
+
+/**
+ * @param {string} search
+ * @returns {string}
+ */
+export function stripChallengeParamFromSearch(search) {
+  const raw = typeof search === "string" ? search : "";
+  const params = new URLSearchParams(raw.startsWith("?") ? raw.slice(1) : raw);
+  params.delete("c");
+  const next = params.toString();
+  return next ? `?${next}` : "";
+}
+
+/**
+ * @param {string} raw
+ * @returns {string}
+ */
+function normalizeAuthorName(raw) {
+  return String(raw ?? "")
+    .trim()
+    .slice(0, CHALLENGE_AUTHOR_NAME_MAX_LEN);
+}
+
+export function sanitizeChallengeAuthorName(raw) {
+  return normalizeAuthorName(raw);
+}
+
+/**
+ * @param {unknown} payload
+ * @returns {{
+ *   v: number,
+ *   seed: string,
+ *   challengeId: string,
+ *   authorName: string,
+ *   authorScore: number,
+ *   createdAt: string,
+ *   challengerRounds?: Array<{ userHsv: { h: number, s: number, v: number }, roundScore: number }>
+ * } | null}
+ */
+export function validateChallengePayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const data = /** @type {Record<string, unknown>} */ (payload);
+  const authorName = normalizeAuthorName(data.authorName);
+  const challengerRounds = normalizeChallengerRounds(data.challengerRounds);
+  if (
+    data.v !== CHALLENGE_PAYLOAD_VERSION ||
+    typeof data.seed !== "string" ||
+    !/^\d{10}$/.test(data.seed) ||
+    typeof data.challengeId !== "string" ||
+    !data.challengeId.trim() ||
+    !authorName ||
+    typeof data.authorScore !== "number" ||
+    !Number.isInteger(data.authorScore) ||
+    data.authorScore < 0 ||
+    data.authorScore > 100 ||
+    typeof data.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(data.createdAt)) ||
+    (data.challengerRounds !== undefined && !challengerRounds)
+  ) {
+    return null;
+  }
+  return {
+    v: CHALLENGE_PAYLOAD_VERSION,
+    seed: data.seed,
+    challengeId: data.challengeId.trim(),
+    authorName,
+    authorScore: data.authorScore,
+    createdAt: data.createdAt,
+    challengerRounds: challengerRounds ?? undefined,
+  };
+}
+
+/**
+ * @param {unknown} rounds
+ * @returns {Array<{ userHsv: { h: number, s: number, v: number }, roundScore: number }> | null}
+ */
+function normalizeChallengerRounds(rounds) {
+  if (!Array.isArray(rounds)) return null;
+  const out = [];
+  for (const item of rounds) {
+    if (!item || typeof item !== "object") return null;
+    const row = /** @type {Record<string, unknown>} */ (item);
+    const userHsv = row.userHsv;
+    if (
+      !userHsv ||
+      typeof userHsv !== "object" ||
+      typeof userHsv.h !== "number" ||
+      typeof userHsv.s !== "number" ||
+      typeof userHsv.v !== "number" ||
+      typeof row.roundScore !== "number" ||
+      !Number.isInteger(row.roundScore) ||
+      row.roundScore < 0 ||
+      row.roundScore > 100
+    ) {
+      return null;
+    }
+    out.push({
+      userHsv: { h: userHsv.h, s: userHsv.s, v: userHsv.v },
+      roundScore: row.roundScore,
+    });
+  }
+  return out;
+}
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+function toBase64(text) {
+  if (typeof btoa === "function") {
+    const bytes = new TextEncoder().encode(text);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+  if (typeof globalThis.Buffer === "function") {
+    return globalThis.Buffer.from(text, "utf8").toString("base64");
+  }
+  throw new Error("Base64EncodingUnavailable");
+}
+
+/**
+ * @param {string} b64
+ * @returns {string}
+ */
+function fromBase64(b64) {
+  if (typeof atob === "function") {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+  }
+  if (typeof globalThis.Buffer === "function") {
+    return globalThis.Buffer.from(b64, "base64").toString("utf8");
+  }
+  throw new Error("Base64DecodingUnavailable");
+}
+
+/**
+ * @param {string} text
+ */
+export function toBase64Url(text) {
+  return toBase64(text).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+}
+
+/**
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function fromBase64Url(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+  try {
+    return fromBase64(padded);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {unknown} payload
+ * @returns {string}
+ */
+export function encodeChallengePayload(payload) {
+  const valid = validateChallengePayload(payload);
+  if (!valid) throw new Error("InvalidChallengePayload");
+  return toBase64Url(JSON.stringify(valid));
+}
+
+/**
+ * @param {string | null} value
+ * @returns {ReturnType<typeof validateChallengePayload>}
+ */
+export function decodeChallengePayloadParam(value) {
+  if (!value) return null;
+  const jsonText = fromBase64Url(value);
+  if (!jsonText) return null;
+  try {
+    return validateChallengePayload(JSON.parse(jsonText));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {{
+ *   v?: number,
+ *   seed: string,
+ *   challengeId?: string,
+ *   authorName: string,
+ *   authorScore: number,
+ *   createdAt?: string,
+ *   challengerRounds?: Array<{ userHsv: { h: number, s: number, v: number }, roundScore: number }>
+ * }} input
+ */
+export function createChallengePayload(input) {
+  const nowIso = new Date().toISOString();
+  const challengeId =
+    input.challengeId ?? `ch_${generateRunSeed()}_${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    v: CHALLENGE_PAYLOAD_VERSION,
+    seed: input.seed,
+    challengeId,
+    authorName: sanitizeChallengeAuthorName(input.authorName),
+    authorScore: input.authorScore,
+    createdAt: input.createdAt ?? nowIso,
+    challengerRounds: normalizeChallengerRounds(input.challengerRounds) ?? undefined,
+  };
+}
+
+/**
+ * @param {{ origin: string, pathname: string }} base
+ * @param {unknown} payload
+ */
+export function buildChallengeUrl(base, payload) {
+  const encoded = encodeChallengePayload(payload);
+  return `${base.origin}${base.pathname}?c=${encoded}`;
+}
+
+/**
+ * @param {{ search?: string, hash?: string }} source
+ * @returns {{ seed: string | null, challenge: ReturnType<typeof validateChallengePayload> }}
+ */
+export function parseRunLaunchContext(source) {
+  const challengeParam = parseChallengeParamFromSearch(source.search ?? "");
+  const challenge = decodeChallengePayloadParam(challengeParam);
+  if (challenge) {
+    return { seed: challenge.seed, challenge };
+  }
+  const seed = parseSeedFromHash(source.hash ?? "");
+  return { seed, challenge: null };
+}
+
+/**
  * @param {() => number} [rng]
  */
 export function generateRunSeed(rng = Math.random) {
@@ -35,6 +288,13 @@ export function generateRunSeed(rng = Math.random) {
     seed += Math.floor(rng() * 10);
   }
   return seed;
+}
+
+export function generateRunId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `run_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -115,6 +375,7 @@ export function createRun(
   roundsPerRun = ROUNDS_PER_RUN,
   rng = Math.random,
   seed = generateRunSeed(rng),
+  options = {},
 ) {
   const targets = [];
   for (let i = 0; i < roundsPerRun; i += 1) {
@@ -129,6 +390,43 @@ export function createRun(
     hasInteractedThisRound: false,
     startedAt: new Date().toISOString(),
     seed,
+    runId: typeof options.runId === "string" && options.runId ? options.runId : generateRunId(),
+    challenge: normalizeChallengeMeta(options.challenge),
+    retryOfRunId:
+      typeof options.retryOfRunId === "string" && options.retryOfRunId
+        ? options.retryOfRunId
+        : null,
+  };
+}
+
+/**
+ * @param {unknown} challenge
+ */
+function normalizeChallengeMeta(challenge) {
+  if (!challenge || typeof challenge !== "object") return null;
+  const data = /** @type {Record<string, unknown>} */ (challenge);
+  const challengerRounds = normalizeChallengerRounds(data.challengerRounds);
+  if (
+    typeof data.challengeId !== "string" ||
+    !data.challengeId.trim() ||
+    typeof data.authorName !== "string" ||
+    !sanitizeChallengeAuthorName(data.authorName) ||
+    typeof data.authorScore !== "number" ||
+    !Number.isInteger(data.authorScore) ||
+    data.authorScore < 0 ||
+    data.authorScore > 100 ||
+    typeof data.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(data.createdAt)) ||
+    (data.challengerRounds !== undefined && !challengerRounds)
+  ) {
+    return null;
+  }
+  return {
+    challengeId: data.challengeId.trim(),
+    authorName: sanitizeChallengeAuthorName(data.authorName),
+    authorScore: data.authorScore,
+    createdAt: data.createdAt,
+    challengerRounds: challengerRounds ?? undefined,
   };
 }
 
@@ -199,11 +497,15 @@ export function aggregatePercent(committed) {
  * @returns {{ aggregatePct: number, rounds: CommittedRound[] }}
  */
 export function buildFinishedSession(run) {
+  const challenge = normalizeChallengeMeta(run.challenge);
   return {
     aggregatePct: aggregatePercent(run.committed),
     runMeta: {
       seed: run.seed,
       startedAt: run.startedAt,
+      runId: run.runId,
+      challenge: challenge ?? undefined,
+      retryOfRunId: run.retryOfRunId ?? undefined,
     },
     rounds: run.committed.map((r) => ({
       targetHsv: r.targetHsv,
@@ -276,6 +578,12 @@ export function hydrateRunFromDraft(draft) {
       typeof draft.seed === "string" && /^\d{10}$/.test(draft.seed)
         ? draft.seed
         : generateRunSeed(),
+    runId: typeof draft.runId === "string" && draft.runId.trim() ? draft.runId : generateRunId(),
+    challenge: normalizeChallengeMeta(draft.challenge),
+    retryOfRunId:
+      typeof draft.retryOfRunId === "string" && draft.retryOfRunId.trim()
+        ? draft.retryOfRunId
+        : null,
   };
 }
 
@@ -296,6 +604,9 @@ export function runToDraftSnapshot(run) {
     hasInteractedThisRound: Boolean(run.hasInteractedThisRound),
     startedAt: run.startedAt,
     seed: run.seed,
+    runId: run.runId,
+    challenge: run.challenge ?? undefined,
+    retryOfRunId: run.retryOfRunId ?? undefined,
     updatedAt: new Date().toISOString(),
   };
 }

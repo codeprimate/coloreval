@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { matchPercentHsv } from "../src/color.js";
 import {
   ROUNDS_PER_RUN,
+  CHALLENGE_PAYLOAD_VERSION,
   NEUTRAL_USER_HSV,
   createRun,
   createSeededRng,
@@ -10,6 +11,14 @@ import {
   aggregatePercent,
   buildFinishedSession,
   generateRunSeed,
+  generateRunId,
+  createChallengePayload,
+  encodeChallengePayload,
+  decodeChallengePayloadParam,
+  parseRunLaunchContext,
+  parseChallengeParamFromSearch,
+  stripChallengeParamFromSearch,
+  sanitizeChallengeAuthorName,
   hydrateRunFromDraft,
   parseSeedFromHash,
   runToDraftSnapshot,
@@ -38,6 +47,12 @@ describe("createRun", () => {
     expect(runA.seed).toBe(seed);
     expect(runB.seed).toBe(seed);
     expect(runA.targets).toEqual(runB.targets);
+  });
+
+  it("adds runId to new runs", () => {
+    const run = createRun(2, () => 0.2);
+    expect(typeof run.runId).toBe("string");
+    expect(run.runId.length).toBeGreaterThan(8);
   });
 
   it("prefers wildly different adjacent targets", () => {
@@ -78,6 +93,7 @@ describe("aggregatePercent / buildFinishedSession", () => {
     expect(fin.aggregatePct).toBe(50);
     expect(fin.rounds).toHaveLength(2);
     expect(fin.runMeta.seed).toMatch(/^\d{10}$/);
+    expect(typeof fin.runMeta.runId).toBe("string");
   });
 });
 
@@ -94,6 +110,7 @@ describe("draft round-trip", () => {
     expect(restored.userHsv).toEqual(run.userHsv);
     expect(restored.hasInteractedThisRound).toBe(true);
     expect(restored.seed).toMatch(/^\d{10}$/);
+    expect(typeof restored.runId).toBe("string");
   });
 
   it("infers slider interaction for legacy drafts", () => {
@@ -140,5 +157,66 @@ describe("seed utilities", () => {
     const seed = generateRunSeed(() => 0.1);
     expect(seed).toHaveLength(10);
     expect(seed).toMatch(/^\d{10}$/);
+  });
+});
+
+describe("challenge payload helpers", () => {
+  it("encodes and decodes a valid payload", () => {
+    const payload = createChallengePayload({
+      seed: "1234567890",
+      authorName: "  alice  ",
+      authorScore: 87,
+      challengeId: "ch_test",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      challengerRounds: [{ userHsv: { h: 1, s: 0.2, v: 0.3 }, roundScore: 74 }],
+    });
+    const encoded = encodeChallengePayload(payload);
+    const decoded = decodeChallengePayloadParam(encoded);
+    expect(decoded).not.toBeNull();
+    expect(decoded.v).toBe(CHALLENGE_PAYLOAD_VERSION);
+    expect(decoded.authorName).toBe("alice");
+    expect(decoded.seed).toBe("1234567890");
+    expect(decoded.challengerRounds).toEqual([
+      { userHsv: { h: 1, s: 0.2, v: 0.3 }, roundScore: 74 },
+    ]);
+  });
+
+  it("returns null for invalid payload param", () => {
+    expect(decodeChallengePayloadParam("not_a_payload")).toBeNull();
+  });
+
+  it("launch context prefers challenge payload over hash seed", () => {
+    const payload = createChallengePayload({
+      seed: "1111111111",
+      authorName: "bob",
+      authorScore: 44,
+      challengeId: "ch_1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    const encoded = encodeChallengePayload(payload);
+    const launch = parseRunLaunchContext({
+      search: `?c=${encoded}`,
+      hash: "#seed=9999999999",
+    });
+    expect(launch.seed).toBe("1111111111");
+    expect(launch.challenge?.challengeId).toBe("ch_1");
+  });
+
+  it("parses and strips c param from search", () => {
+    expect(parseChallengeParamFromSearch("?c=abc&x=1")).toBe("abc");
+    expect(stripChallengeParamFromSearch("?c=abc&x=1")).toBe("?x=1");
+  });
+});
+
+describe("sanitizers and ids", () => {
+  it("trims and caps challenge author names", () => {
+    const longName = "  abcdefghijklmnopqrstuvwxyz  ";
+    expect(sanitizeChallengeAuthorName(longName)).toBe("abcdefghijklmnopqrstuvwx");
+  });
+
+  it("generates run ids", () => {
+    const id = generateRunId();
+    expect(typeof id).toBe("string");
+    expect(id.length).toBeGreaterThan(8);
   });
 });

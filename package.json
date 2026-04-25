@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
-    "motion": "^12.38.0"
+    "motion": "^12.38.0",
+    "qrcode": "^1.5.4"
   }
 }

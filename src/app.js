@@ -1,13 +1,19 @@
 import { hsvToCssColor } from "./color.js";
+import QRCode from "qrcode";
 import {
   ROUNDS_PER_RUN,
+  CHALLENGE_AUTHOR_NAME_MAX_LEN,
   createRun,
   createSeededRng,
   commitCurrentRound,
   buildFinishedSession,
   generateRunSeed,
+  createChallengePayload,
+  sanitizeChallengeAuthorName,
+  buildChallengeUrl,
+  parseRunLaunchContext,
+  stripChallengeParamFromSearch,
   hydrateRunFromDraft,
-  parseSeedFromHash,
   runToDraftSnapshot,
   currentRoundIndex,
   currentTargetHsv,
@@ -30,7 +36,7 @@ import {
   triggerResultAnimation,
 } from "./animations.js";
 
-/** @typedef {'home' | 'play' | 'results' | 'history'} Screen */
+/** @typedef {'home' | 'play' | 'results' | 'history' | 'challenge-share'} Screen */
 /** @typedef {"forward"|"back"|"up"|"none"} TransitionDirection */
 
 /**
@@ -44,11 +50,13 @@ export function initApp(root) {
     screen: "home",
     /** @type {ReturnType<typeof createRun> | null} */
     run: null,
-    /** @type {{ aggregatePct: number, rounds: object[] } | null} */
+    /** @type {{ aggregatePct: number, rounds: object[], runMeta?: object } | null} */
     lastResult: null,
+    /** @type {{ username: string, url: string | null, qrDataUrl: string | null, error: string | null }} */
+    challengeShare: { username: "", url: null, qrDataUrl: null, error: null },
     /** @type {string | null} */
     storageError: null,
-    /** @type {{ endedAt: string, aggregatePct: number, rounds: object[], runMeta?: { seed: string, startedAt?: string } } | null} */
+    /** @type {{ endedAt: string, aggregatePct: number, rounds: object[], runMeta?: object } | null} */
     pendingSession: null,
     /** @type {number | null} */
     expandedHistoryIndex: null,
@@ -103,15 +111,39 @@ export function initApp(root) {
     });
   }
 
-  function startNewRun() {
+  /**
+   * @param {{ seed?: string | null, challenge?: object | null, retryOfRunId?: string | null, forceRandom?: boolean }} [opts]
+   */
+  function startNewRun(opts = {}) {
     clearDraft();
-    const resolvedSeed = parseSeedFromHash(window.location.hash) ?? generateRunSeed();
+    const launch = opts.forceRandom
+      ? { seed: null, challenge: null }
+      : parseRunLaunchContext({ search: window.location.search, hash: window.location.hash });
+    const resolvedSeed = opts.seed ?? launch.seed ?? generateRunSeed();
+    const challengeMeta = opts.challenge ?? launch.challenge ?? null;
     const rng = createSeededRng(resolvedSeed);
-    state.run = createRun(ROUNDS_PER_RUN, rng, resolvedSeed);
+    state.run = createRun(ROUNDS_PER_RUN, rng, resolvedSeed, {
+      challenge: challengeMeta,
+      retryOfRunId: opts.retryOfRunId ?? null,
+    });
+    if (launch.challenge && window.location.search.includes("c=")) {
+      const cleanedSearch = stripChallengeParamFromSearch(window.location.search);
+      const next = `${window.location.pathname}${cleanedSearch}${window.location.hash}`;
+      window.history.replaceState({}, "", next);
+    }
     const res = saveDraft(runToDraftSnapshot(state.run));
     if (!res.ok) {
       state.storageError = res.error ?? "save";
     }
+    state.challengeShare = {
+      username:
+        challengeMeta && typeof challengeMeta.authorName === "string"
+          ? challengeMeta.authorName
+          : "",
+      url: null,
+      qrDataUrl: null,
+      error: null,
+    };
     state.screen = "play";
     render("forward");
   }
@@ -128,7 +160,7 @@ export function initApp(root) {
       state.pendingSession = null;
     }
     clearDraft();
-    state.lastResult = { aggregatePct, rounds };
+    state.lastResult = { aggregatePct, rounds, runMeta };
     state.run = null;
     state.screen = "results";
     render("up");
@@ -178,6 +210,8 @@ export function initApp(root) {
       body = renderPlay();
     } else if (state.screen === "results" && state.lastResult) {
       body = renderResults();
+    } else if (state.screen === "challenge-share" && state.lastResult) {
+      body = renderChallengeShare();
     } else if (state.screen === "history") {
       body = renderHistory();
     } else {
@@ -229,6 +263,14 @@ export function initApp(root) {
   }
 
   function renderHome() {
+    const launch = parseRunLaunchContext({
+      search: window.location.search,
+      hash: window.location.hash,
+    });
+    const playLabel =
+      launch.challenge && typeof launch.challenge.authorName === "string"
+        ? `Play vs. ${escapeHtml(launch.challenge.authorName)}`
+        : "Play";
     const prefs = loadPrefs();
     const hint = !prefs.hintDismissed
       ? `<p class="hint">Match the target color by adjusting the HSV sliders.</p>
@@ -255,7 +297,7 @@ export function initApp(root) {
             </div>
           </div>
           <div class="stack stack--actions">
-            <button type="button" class="btn btn--primary" data-action="play">Play</button>
+            <button type="button" class="btn btn--primary" data-action="play">${playLabel}</button>
             <button type="button" class="btn btn--outline" data-action="history">Top 10</button>
           </div>
         </main>
@@ -279,6 +321,10 @@ export function initApp(root) {
     const { hue, sat, val } = hsvToRangeValues(run.userHsv);
     const targetCss = hsvToCssColor(target);
     const yoursCss = hsvToCssColor(run.userHsv);
+    const challengeBanner =
+      run.challenge && typeof run.challenge.authorName === "string"
+        ? `<p class="challenge-banner">challenge vs. ${escapeHtml(run.challenge.authorName)}</p>`
+        : "";
 
     return `
       <div class="shell shell--play">
@@ -295,6 +341,7 @@ export function initApp(root) {
           <div class="topbar__right title">coloreval</div>
         </div>
         <main class="main main--play">
+          ${challengeBanner}
           <div class="swatch-row">
             <div class="swatch-block">
               <div class="swatch" style="background-color: ${targetCss}" role="img" aria-label="Target color"></div>
@@ -339,6 +386,18 @@ export function initApp(root) {
 
   function renderResults() {
     const { aggregatePct, rounds } = state.lastResult;
+    const challengeMeta = state.lastResult.runMeta?.challenge ?? null;
+    const challengerName =
+      challengeMeta && typeof challengeMeta.authorName === "string"
+        ? challengeMeta.authorName
+        : null;
+    const challengerRounds = Array.isArray(challengeMeta?.challengerRounds)
+      ? challengeMeta.challengerRounds
+      : null;
+    const showChallengerColumn =
+      Boolean(challengerName) &&
+      Array.isArray(challengerRounds) &&
+      challengerRounds.length === rounds.length;
     const dots = rounds
       .map(
         (r, i) =>
@@ -349,12 +408,28 @@ export function initApp(root) {
       .map((round, roundIndex) => {
         const targetCss = hsvToCssColor(round.targetHsv);
         const userCss = hsvToCssColor(round.userHsv);
+        const challengerRound = showChallengerColumn ? challengerRounds[roundIndex] : null;
+        const yourWinnerClass =
+          challengerRound && round.roundScore > challengerRound.roundScore
+            ? " history-round-swatch--winner"
+            : "";
+        const challengerLoserClass =
+          challengerRound && challengerRound.roundScore > round.roundScore
+            ? " history-round-swatch--loser"
+            : "";
+        const challengerCell = showChallengerColumn
+          ? `
+            <span class="history-round-score tabular">${challengerRound.roundScore}%</span>
+            <span class="history-round-swatch${challengerLoserClass}" style="background-color: ${hsvToCssColor(challengerRound.userHsv)}" aria-label="Round ${roundIndex + 1} challenger color"></span>
+          `
+          : "";
         return `
-          <li class="history-round-row">
+          <li class="history-round-row ${showChallengerColumn ? "history-round-row--challenge" : ""}">
             <span class="history-round-index tabular">R${roundIndex + 1}</span>
             <span class="history-round-swatch" style="background-color: ${targetCss}" aria-label="Round ${roundIndex + 1} target color"></span>
             <span class="history-round-score tabular">${round.roundScore}%</span>
-            <span class="history-round-swatch" style="background-color: ${userCss}" aria-label="Round ${roundIndex + 1} your color"></span>
+            <span class="history-round-swatch${yourWinnerClass}" style="background-color: ${userCss}" aria-label="Round ${roundIndex + 1} your color"></span>
+            ${challengerCell}
           </li>
         `;
       })
@@ -372,19 +447,99 @@ export function initApp(root) {
           </p>
           <div class="round-strip" aria-hidden="true">${dots}</div>
           <div class="history-detail" style="width:100%">
-            <div class="history-round-columns" aria-hidden="true">
+            <div class="history-round-columns ${showChallengerColumn ? "history-round-columns--challenge" : ""}" aria-hidden="true">
               <span></span>
               <span class="history-round-column-label">Target</span>
               <span></span>
               <span class="history-round-column-label">Yours</span>
+              ${
+                showChallengerColumn
+                  ? `<span></span><span class="history-round-column-label">${escapeHtml(challengerName)}</span>`
+                  : ""
+              }
             </div>
             <ul class="history-round-list">${roundRows}</ul>
           </div>
           <div class="stack stack--actions" style="width:100%">
             <button type="button" class="btn btn--primary" data-action="again">Play again</button>
+            <button type="button" class="btn btn--outline" data-action="share">Share challenge</button>
             <button type="button" class="btn btn--outline" data-action="history">Top 10</button>
             <button type="button" class="btn btn--outline" data-action="home">Home</button>
           </div>
+        </main>
+      </div>
+    `;
+  }
+
+  function renderChallengeShare() {
+    if (!state.lastResult || !state.lastResult.runMeta || !state.lastResult.runMeta.seed) {
+      state.screen = "results";
+      return renderResults();
+    }
+    const { aggregatePct, rounds } = state.lastResult;
+    const targets = rounds
+      .map(
+        (r, i) =>
+          `<span class="challenge-target-swatch" style="background-color:${hsvToCssColor(r.targetHsv)}" aria-label="Target swatch ${i + 1}"></span>`,
+      )
+      .join("");
+    const username = escapeHtml(state.challengeShare.username);
+    const urlPreview = state.challengeShare.url
+      ? `
+      <div class="challenge-link-row">
+        <a class="challenge-link-title" href="${state.challengeShare.url}" target="_blank" rel="noopener noreferrer">coloreval Challenge</a>
+        <button type="button" class="btn--icon challenge-copy-btn" data-action="challenge-copy" aria-label="Copy challenge link">⧉</button>
+      </div>
+    `
+      : "";
+    const qrHtml = state.challengeShare.qrDataUrl
+      ? `<div class="challenge-qr-wrap"><img class="challenge-qr-image" src="${state.challengeShare.qrDataUrl}" alt="QR code for challenge link" /></div>`
+      : "";
+    const err = state.challengeShare.error
+      ? `<p class="muted challenge-share-error">${escapeHtml(state.challengeShare.error)}</p>`
+      : "";
+
+    const shareAction = state.challengeShare.url
+      ? ""
+      : `
+          <div class="stack stack--actions" style="width:100%">
+            <button type="button" class="btn btn--primary" data-action="challenge-generate">Share</button>
+          </div>
+        `;
+
+    return `
+      <div class="shell shell--results shell--challenge-share">
+        <div class="topbar topbar--share">
+          <div class="topbar__left">
+            <button type="button" class="btn--back" data-action="results">← Back</button>
+          </div>
+          <div class="topbar__title">Share challenge</div>
+          <div class="topbar__right-spacer" aria-hidden="true"></div>
+        </div>
+        <main class="main main--results">
+          <p class="score-line">
+            <span class="score tabular">${aggregatePct}</span>
+            <span class="score-meta">
+              <span class="score-brand title">coloreval</span>
+              <span class="score-suffix">% match</span>
+            </span>
+          </p>
+          <div class="challenge-target-strip" aria-label="Target swatches">${targets}</div>
+          <label class="challenge-name-field" for="challenge-username">
+            Username
+            <input
+              id="challenge-username"
+              class="challenge-name-input"
+              type="text"
+              maxlength="${CHALLENGE_AUTHOR_NAME_MAX_LEN}"
+              value="${username}"
+              placeholder="Your name"
+            />
+          </label>
+          ${err}
+          ${shareAction}
+          ${urlPreview}
+          ${qrHtml}
         </main>
       </div>
     `;
@@ -420,6 +575,8 @@ export function initApp(root) {
           minute: "2-digit",
         });
         const isExpanded = state.expandedHistoryIndex === historyIndex;
+        const canRetry = Boolean(s.runMeta && typeof s.runMeta.seed === "string");
+        const challengeMeta = s.runMeta && s.runMeta.challenge ? s.runMeta.challenge : null;
         const roundRows = s.rounds
           .map((round, roundIndex) => {
             const targetCss = hsvToCssColor(round.targetHsv);
@@ -446,6 +603,14 @@ export function initApp(root) {
               <span class="history-date">${escapeHtml(dateStr)}</span>
               <span class="tabular history-pct">${s.aggregatePct}%</span>
             </button>
+            <div class="history-row-actions">
+              <button type="button" class="btn--icon history-retry-btn" data-action="history-retry" data-history-index="${historyIndex}" ${canRetry ? "" : "disabled"} aria-label="Retry this run" title="${canRetry ? "Retry this run" : "Retry unavailable"}">↻</button>
+            </div>
+            ${
+              challengeMeta
+                ? `<p class="history-challenge-note">⚑ ${escapeHtml(challengeMeta.authorName)}</p>`
+                : ""
+            }
             <div class="history-detail-wrap" aria-hidden="${isExpanded ? "false" : "true"}">
               <div class="history-detail">
                 <div class="history-round-columns" aria-hidden="true">
@@ -543,6 +708,77 @@ export function initApp(root) {
   }
 
   /**
+   * @param {number} historyIndex
+   */
+  function retryFromHistoryIndex(historyIndex) {
+    const sessions = selectTopSessionsByScore(loadSessions(), 10);
+    const session = sessions[historyIndex];
+    if (!session || !session.runMeta || typeof session.runMeta.seed !== "string") return;
+    const challenge = session.runMeta.challenge ?? null;
+    startNewRun({
+      seed: session.runMeta.seed,
+      challenge,
+      retryOfRunId: typeof session.runMeta.runId === "string" ? session.runMeta.runId : null,
+    });
+  }
+
+  async function generateChallengeLink() {
+    if (
+      !state.lastResult ||
+      !state.lastResult.runMeta ||
+      typeof state.lastResult.runMeta.seed !== "string"
+    ) {
+      return;
+    }
+    const input = root.querySelector("#challenge-username");
+    const rawName = input instanceof HTMLInputElement ? input.value : state.challengeShare.username;
+    const authorName = sanitizeChallengeAuthorName(rawName);
+    state.challengeShare.username = authorName;
+    if (!authorName) {
+      state.challengeShare.error = "Enter a username to share this challenge.";
+      state.challengeShare.url = null;
+      state.challengeShare.qrDataUrl = null;
+      render("none");
+      return;
+    }
+    const payload = createChallengePayload({
+      seed: state.lastResult.runMeta.seed,
+      authorName,
+      authorScore: state.lastResult.aggregatePct,
+      challengerRounds: state.lastResult.rounds.map((round) => ({
+        userHsv: round.userHsv,
+        roundScore: round.roundScore,
+      })),
+    });
+    const url = buildChallengeUrl(
+      { origin: window.location.origin, pathname: window.location.pathname },
+      payload,
+    );
+    try {
+      const qrDataUrl = await QRCode.toDataURL(url, { width: 220, margin: 1 });
+      state.challengeShare.url = url;
+      state.challengeShare.qrDataUrl = qrDataUrl;
+      state.challengeShare.error = null;
+    } catch {
+      state.challengeShare.url = url;
+      state.challengeShare.qrDataUrl = null;
+      state.challengeShare.error = "Couldn't generate QR code.";
+    }
+    render("none");
+  }
+
+  async function copyChallengeLink() {
+    if (!state.challengeShare.url) return;
+    try {
+      await navigator.clipboard.writeText(state.challengeShare.url);
+    } catch {
+      state.challengeShare.error =
+        "Couldn't copy link. You can copy it from the browser address bar.";
+      render("none");
+    }
+  }
+
+  /**
    * Toggle a history row in place so CSS transitions can animate.
    * @param {HTMLElement} rowButton
    * @param {number} index
@@ -592,8 +828,27 @@ export function initApp(root) {
       render("back");
       return;
     }
+    if (action === "results") {
+      state.screen = "results";
+      render("back");
+      return;
+    }
     if (action === "again") {
-      startNewRun();
+      startNewRun({ forceRandom: true });
+      return;
+    }
+    if (action === "share") {
+      state.challengeShare.error = null;
+      state.screen = "challenge-share";
+      render("forward");
+      return;
+    }
+    if (action === "challenge-generate") {
+      void generateChallengeLink();
+      return;
+    }
+    if (action === "challenge-copy") {
+      void copyChallengeLink();
       return;
     }
     if (action === "history-toggle") {
@@ -601,6 +856,13 @@ export function initApp(root) {
       const index = Number(indexStr);
       if (!Number.isInteger(index)) return;
       toggleHistoryRowInPlace(actionEl, index);
+      return;
+    }
+    if (action === "history-retry") {
+      const indexStr = actionEl.dataset.historyIndex;
+      const index = Number(indexStr);
+      if (!Number.isInteger(index)) return;
+      retryFromHistoryIndex(index);
       return;
     }
     if (action === "commit") {

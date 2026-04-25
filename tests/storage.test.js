@@ -51,7 +51,19 @@ describe("storage", () => {
       endedAt: "2026-01-01T00:00:00.000Z",
       aggregatePct: 77,
       rounds: [],
-      runMeta: { seed: "1234567890", startedAt: "2026-01-01T00:00:00.000Z" },
+      runMeta: {
+        seed: "1234567890",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        runId: "run_1",
+        challenge: {
+          challengeId: "ch_1",
+          authorName: "alice",
+          authorScore: 77,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          challengerRounds: [{ userHsv: { h: 10, s: 0.2, v: 0.3 }, roundScore: 77 }],
+        },
+        retryOfRunId: "run_0",
+      },
     });
     const list = loadSessions();
     expect(list).toHaveLength(1);
@@ -60,7 +72,36 @@ describe("storage", () => {
     expect(list[0].runMeta).toEqual({
       seed: "1234567890",
       startedAt: "2026-01-01T00:00:00.000Z",
+      runId: "run_1",
+      challenge: {
+        challengeId: "ch_1",
+        authorName: "alice",
+        authorScore: 77,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        challengerRounds: [{ userHsv: { h: 10, s: 0.2, v: 0.3 }, roundScore: 77 }],
+      },
+      retryOfRunId: "run_0",
     });
+  });
+
+  it("keeps legacy sessions readable", () => {
+    mem.setItem(
+      "coloreval_sessions_v1",
+      JSON.stringify({
+        schemaVersion: STORAGE_SCHEMA_VERSION,
+        sessions: [
+          {
+            id: "old_1",
+            endedAt: "2026-01-01T00:00:00.000Z",
+            aggregatePct: 50,
+            rounds: [],
+          },
+        ],
+      }),
+    );
+    const list = loadSessions();
+    expect(list).toHaveLength(1);
+    expect(list[0].runMeta).toBeUndefined();
   });
 
   it("saves and loads draft with schema", () => {

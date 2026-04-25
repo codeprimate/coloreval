@@ -11,7 +11,19 @@ export const LS_KEY_PREFS = "coloreval_prefs_v1";
  *   endedAt: string,
  *   aggregatePct: number,
  *   rounds: import("./run.js").CommittedRound[],
- *   runMeta?: { seed: string, startedAt?: string },
+ *   runMeta?: {
+ *     seed: string,
+ *     startedAt?: string,
+ *     runId?: string,
+ *     challenge?: {
+ *       challengeId: string,
+ *       authorName: string,
+ *       authorScore: number,
+ *       createdAt: string,
+ *       challengerRounds?: Array<{ userHsv: { h: number, s: number, v: number }, roundScore: number }>,
+ *     },
+ *     retryOfRunId?: string,
+ *   },
  * }} StoredSession
  */
 
@@ -71,17 +83,7 @@ export function loadSessions() {
           endedAt: s.endedAt,
           aggregatePct: s.aggregatePct,
           rounds: s.rounds,
-          runMeta:
-            s.runMeta &&
-            typeof s.runMeta === "object" &&
-            typeof s.runMeta.seed === "string" &&
-            /^\d{10}$/.test(s.runMeta.seed)
-              ? {
-                  seed: s.runMeta.seed,
-                  startedAt:
-                    typeof s.runMeta.startedAt === "string" ? s.runMeta.startedAt : undefined,
-                }
-              : undefined,
+          runMeta: normalizeRunMeta(s.runMeta),
         });
       }
     }
@@ -89,6 +91,76 @@ export function loadSessions() {
   } catch {
     return [];
   }
+}
+
+function normalizeRunMeta(runMeta) {
+  if (!runMeta || typeof runMeta !== "object") return undefined;
+  if (typeof runMeta.seed !== "string" || !/^\d{10}$/.test(runMeta.seed)) return undefined;
+  const challenge = normalizeChallengeMeta(runMeta.challenge);
+  return {
+    seed: runMeta.seed,
+    startedAt: typeof runMeta.startedAt === "string" ? runMeta.startedAt : undefined,
+    runId: typeof runMeta.runId === "string" ? runMeta.runId : undefined,
+    challenge: challenge ?? undefined,
+    retryOfRunId: typeof runMeta.retryOfRunId === "string" ? runMeta.retryOfRunId : undefined,
+  };
+}
+
+function normalizeChallengeMeta(challenge) {
+  if (!challenge || typeof challenge !== "object") return null;
+  const challengerRounds = normalizeChallengerRounds(challenge.challengerRounds);
+  if (
+    typeof challenge.challengeId !== "string" ||
+    !challenge.challengeId.trim() ||
+    typeof challenge.authorName !== "string" ||
+    !challenge.authorName.trim() ||
+    typeof challenge.authorScore !== "number" ||
+    !Number.isInteger(challenge.authorScore) ||
+    challenge.authorScore < 0 ||
+    challenge.authorScore > 100 ||
+    typeof challenge.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(challenge.createdAt)) ||
+    (challenge.challengerRounds !== undefined && !challengerRounds)
+  ) {
+    return null;
+  }
+  return {
+    challengeId: challenge.challengeId.trim(),
+    authorName: challenge.authorName.trim(),
+    authorScore: challenge.authorScore,
+    createdAt: challenge.createdAt,
+    challengerRounds: challengerRounds ?? undefined,
+  };
+}
+
+function normalizeChallengerRounds(rounds) {
+  if (!Array.isArray(rounds)) return null;
+  const out = [];
+  for (const item of rounds) {
+    if (!item || typeof item !== "object") return null;
+    if (
+      !item.userHsv ||
+      typeof item.userHsv !== "object" ||
+      typeof item.userHsv.h !== "number" ||
+      typeof item.userHsv.s !== "number" ||
+      typeof item.userHsv.v !== "number" ||
+      typeof item.roundScore !== "number" ||
+      !Number.isInteger(item.roundScore) ||
+      item.roundScore < 0 ||
+      item.roundScore > 100
+    ) {
+      return null;
+    }
+    out.push({
+      userHsv: {
+        h: item.userHsv.h,
+        s: item.userHsv.s,
+        v: item.userHsv.v,
+      },
+      roundScore: item.roundScore,
+    });
+  }
+  return out;
 }
 
 /**
