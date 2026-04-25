@@ -929,11 +929,13 @@ body {
 .history-retry-btn {
   width: 2rem;
   height: 2rem;
+  border: 0;
 }
 
 .history-share-btn {
   width: 2rem;
   height: 2rem;
+  border: 0;
 }
 
 .history-challenge-note {

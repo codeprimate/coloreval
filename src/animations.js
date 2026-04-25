@@ -36,7 +36,7 @@ export async function transitionScreen(swap, direction = "forward") {
 /** Button press animations. */
 
 /**
- * Attaches a press-scale animation to `.btn--primary` and `.btn--outline`
+ * Attaches a press-scale animation to interactive button variants
  * elements within `root`. Safe to call multiple times.
  * @param {Element} root
  */
@@ -44,18 +44,46 @@ const _wiredButtons = new WeakSet();
 
 export function wireButtonAnimations(root) {
   if (reducedMotion()) return;
-  root.querySelectorAll(".btn--primary, .btn--outline").forEach((btn) => {
+  root.querySelectorAll(".btn--primary, .btn--outline, .btn--icon").forEach((btn) => {
     if (_wiredButtons.has(btn)) return;
     _wiredButtons.add(btn);
+    const isIconButton = btn.classList.contains("btn--icon");
+    const isHistoryIconButton =
+      btn.classList.contains("history-retry-btn") || btn.classList.contains("history-share-btn");
+    const hoverScale = isIconButton ? (isHistoryIconButton ? 1.05 : 1.02) : 1;
+    const downScale = isIconButton ? (isHistoryIconButton ? 0.9 : 0.96) : 0.96;
+    const animateToHoverOrRest = () => {
+      const nextScale = btn.matches(":hover") ? hoverScale : 1;
+      animate(btn, { scale: nextScale }, { duration: 0.2, easing: [0.22, 1, 0.36, 1] });
+    };
+    btn.addEventListener("pointerenter", () => {
+      if (btn instanceof HTMLButtonElement && btn.disabled) return;
+      if (hoverScale === 1) return;
+      animate(btn, { scale: hoverScale }, { duration: 0.18, easing: [0.22, 1, 0.36, 1] });
+    });
     btn.addEventListener("pointerdown", () => {
-      animate(btn, { scale: 0.96 }, { duration: 0.08, easing: "ease-in" });
+      if (btn instanceof HTMLButtonElement && btn.disabled) return;
+      animate(btn, { scale: downScale }, { duration: 0.08, easing: "ease-in" });
     });
     const release = () => {
-      animate(btn, { scale: 1 }, { duration: 0.2, easing: [0.22, 1, 0.36, 1] });
+      animateToHoverOrRest();
     };
     btn.addEventListener("pointerup", release);
     btn.addEventListener("pointercancel", release);
-    btn.addEventListener("pointerleave", release);
+    btn.addEventListener("pointerleave", () => {
+      animate(btn, { scale: 1 }, { duration: 0.2, easing: [0.22, 1, 0.36, 1] });
+    });
+    btn.addEventListener("keydown", (e) => {
+      if (!(e instanceof KeyboardEvent)) return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (btn instanceof HTMLButtonElement && btn.disabled) return;
+      animate(btn, { scale: downScale }, { duration: 0.08, easing: "ease-in" });
+    });
+    btn.addEventListener("keyup", (e) => {
+      if (!(e instanceof KeyboardEvent)) return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      release();
+    });
   });
 }
 
