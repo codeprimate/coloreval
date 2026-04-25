@@ -2,12 +2,34 @@ import { matchPercentHsv, randomTargetHsv } from "./color.js";
 
 /** Number of rounds per run in schema version 1. */
 export const ROUNDS_PER_RUN = 5;
+const MAX_TARGET_RETRIES = 12;
+const MAX_SIMILAR_TARGET_MATCH_PCT = 85;
 
 /**
  * Slider values applied after each committed round so every round starts from
- * the same neutral HSV value (`h=0`, `s=0`, `v=0.5`).
+ * the same midpoint HSV value (`h=180`, `s=0.5`, `v=0.5`).
  */
-export const NEUTRAL_USER_HSV = Object.freeze({ h: 0, s: 0, v: 0.5 });
+export const NEUTRAL_USER_HSV = Object.freeze({ h: 180, s: 0.5, v: 0.5 });
+
+/**
+ * Picks a random target, retrying if it is too similar to the previous target.
+ * This keeps rounds visually varied without risking infinite loops with fixed RNGs.
+ * @param {{ h: number, s: number, v: number } | null} prevTarget
+ * @param {() => number} rng
+ */
+function pickVariedTarget(prevTarget, rng) {
+  let target = randomTargetHsv(rng);
+  if (!prevTarget) return target;
+  let attempts = 0;
+  while (
+    attempts < MAX_TARGET_RETRIES &&
+    matchPercentHsv(prevTarget, target) >= MAX_SIMILAR_TARGET_MATCH_PCT
+  ) {
+    target = randomTargetHsv(rng);
+    attempts += 1;
+  }
+  return target;
+}
 
 /**
  * @typedef {{ h: number, s: number, v: number }} Hsv
@@ -28,7 +50,8 @@ export const NEUTRAL_USER_HSV = Object.freeze({ h: 0, s: 0, v: 0.5 });
 export function createRun(roundsPerRun = ROUNDS_PER_RUN, rng = Math.random) {
   const targets = [];
   for (let i = 0; i < roundsPerRun; i += 1) {
-    targets.push(randomTargetHsv(rng));
+    const prevTarget = i > 0 ? targets[i - 1] : null;
+    targets.push(pickVariedTarget(prevTarget, rng));
   }
   return {
     roundsPerRun,
