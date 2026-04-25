@@ -337,6 +337,20 @@ export function initApp(root) {
           `<span class="round-dot" style="--dot-score: ${rounds[i].roundScore}; --i: ${i}" title="Round ${i + 1}: ${rounds[i].roundScore}%"></span>`,
       )
       .join("");
+    const roundRows = rounds
+      .map((round, roundIndex) => {
+        const targetCss = hsvToCssColor(round.targetHsv);
+        const userCss = hsvToCssColor(round.userHsv);
+        return `
+          <li class="history-round-row">
+            <span class="history-round-index tabular">R${roundIndex + 1}</span>
+            <span class="history-round-swatch" style="background-color: ${targetCss}" aria-label="Round ${roundIndex + 1} target color"></span>
+            <span class="history-round-score tabular">${round.roundScore}%</span>
+            <span class="history-round-swatch" style="background-color: ${userCss}" aria-label="Round ${roundIndex + 1} your color"></span>
+          </li>
+        `;
+      })
+      .join("");
 
     return `
       <div class="shell shell--results">
@@ -345,6 +359,15 @@ export function initApp(root) {
             <span class="score tabular">${aggregatePct}</span><span class="score-suffix">% match</span>
           </p>
           <div class="round-strip" aria-hidden="true">${dots}</div>
+          <div class="history-detail" style="width:100%">
+            <div class="history-round-columns" aria-hidden="true">
+              <span></span>
+              <span class="history-round-column-label">Target</span>
+              <span></span>
+              <span class="history-round-column-label">Yours</span>
+            </div>
+            <ul class="history-round-list">${roundRows}</ul>
+          </div>
           <div class="stack stack--actions" style="width:100%">
             <button type="button" class="btn btn--primary" data-action="again">Play again</button>
             <button type="button" class="btn btn--outline" data-action="home">Home</button>
@@ -412,7 +435,15 @@ export function initApp(root) {
             </button>
             ${
               isExpanded
-                ? `<div class="history-detail"><ul class="history-round-list">${roundRows}</ul></div>`
+                ? `<div class="history-detail">
+                    <div class="history-round-columns" aria-hidden="true">
+                      <span></span>
+                      <span class="history-round-column-label">Target</span>
+                      <span></span>
+                      <span class="history-round-column-label">Yours</span>
+                    </div>
+                    <ul class="history-round-list">${roundRows}</ul>
+                  </div>`
                 : ""
             }
           </li>
