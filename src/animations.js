@@ -21,25 +21,15 @@ export async function transitionScreen(swap, direction = "forward") {
   const current = app?.querySelector(".shell");
 
   if (current) {
-    const yExit = direction === "back" ? 10 : -10;
-    await animate(
-      current,
-      { opacity: [1, 0], y: [0, yExit] },
-      { duration: 0.15, easing: "ease-in" },
-    );
+    await animate(current, { opacity: [1, 0] }, { duration: 0.15, easing: "ease-in" });
   }
 
   swap();
 
   const next = app?.querySelector(".shell");
   if (next) {
-    const yEnter = direction === "up" ? 20 : direction === "back" ? -10 : 10;
     const dur = direction === "up" ? 0.35 : 0.22;
-    animate(
-      next,
-      { opacity: [0, 1], y: [yEnter, 0] },
-      { duration: dur, easing: [0.22, 1, 0.36, 1] },
-    );
+    animate(next, { opacity: [0, 1] }, { duration: dur, easing: [0.22, 1, 0.36, 1] });
   }
 }
 
