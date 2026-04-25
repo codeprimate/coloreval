@@ -21,8 +21,16 @@ import {
   saveDraft,
   savePrefs,
 } from "./storage.js";
+import {
+  transitionScreen,
+  wireButtonAnimations,
+  animateRoundAdvance,
+  animateQuitShake,
+  triggerResultAnimation,
+} from "./animations.js";
 
 /** @typedef {'home' | 'play' | 'results' | 'history'} Screen */
+/** @typedef {"forward"|"back"|"up"} TransitionDirection */
 
 const state = {
   /** @type {Screen} */
@@ -88,11 +96,13 @@ function bindGlobalPersist() {
 
 function quitRun() {
   if (!state.run) return;
-  if (!confirm("Abandon this run? Progress will not be saved.")) return;
-  clearDraft();
-  state.run = null;
-  state.screen = "home";
-  render();
+  animateQuitShake(() => {
+    if (!confirm("Abandon this run? Progress will not be saved.")) return;
+    clearDraft();
+    state.run = null;
+    state.screen = "home";
+    render("back");
+  });
 }
 
 function startNewRun() {
@@ -103,7 +113,7 @@ function startNewRun() {
     state.storageError = res.error ?? "save";
   }
   state.screen = "play";
-  render();
+  render("forward");
 }
 
 function finishRunToResults() {
@@ -121,8 +131,10 @@ function finishRunToResults() {
   state.lastResult = { aggregatePct, rounds };
   state.run = null;
   state.screen = "results";
-  render();
+  render("up");
 }
+
+let _isRoundAdvance = false;
 
 function onCommitRound() {
   if (!state.run) return;
@@ -136,7 +148,8 @@ function onCommitRound() {
   }
   commitCurrentRound(state.run);
   persistDraft();
-  render();
+  _isRoundAdvance = true;
+  render("forward");
 }
 
 function hsvToRangeValues(hsv) {
@@ -156,8 +169,12 @@ function parseSliders(form) {
   };
 }
 
-function render() {
+/**
+ * @param {TransitionDirection} [direction]
+ */
+async function render(direction = "forward") {
   if (!root) return;
+
   let body = "";
   if (state.screen === "home") {
     body = renderHome();
@@ -171,8 +188,28 @@ function render() {
     state.screen = "home";
     body = renderHome();
   }
-  root.innerHTML = storageBannerHtml() + body;
-  bindScreenHandlers();
+
+  const isRoundAdvance = _isRoundAdvance;
+  _isRoundAdvance = false;
+
+  const banner = storageBannerHtml();
+
+  if (isRoundAdvance) {
+    root.innerHTML = banner + body;
+    bindScreenHandlers();
+    animateRoundAdvance();
+  } else {
+    await transitionScreen(() => {
+      root.innerHTML = banner + body;
+      bindScreenHandlers();
+    }, direction);
+  }
+
+  wireButtonAnimations(root);
+
+  if (state.screen === "results" && state.lastResult) {
+    triggerResultAnimation(state.lastResult.aggregatePct);
+  }
 }
 
 function storageBannerHtml() {
@@ -180,14 +217,14 @@ function storageBannerHtml() {
   const showRetry = Boolean(state.pendingSession);
   return `
     <div class="storage-banner" role="alert">
-      <p class="storage-banner__text">Can’t save scores</p>
+      <p class="storage-banner__text">Can't save scores</p>
       <div class="storage-banner__actions">
         ${
           showRetry
             ? `<button type="button" class="btn btn--small" data-action="storage-retry">Retry</button>`
             : ""
         }
-        <button type="button" class="btn btn--ghost btn--small" data-action="storage-dismiss">Continue without saving</button>
+        <button type="button" class="link btn--small" data-action="storage-dismiss">Continue without saving</button>
       </div>
     </div>
   `;
@@ -196,20 +233,20 @@ function storageBannerHtml() {
 function renderHome() {
   const prefs = loadPrefs();
   const hint = !prefs.hintDismissed
-    ? `<p class="hint" role="note">Match the target color.</p>
-       <button type="button" class="link" data-action="dismiss-hint">Dismiss hint</button>`
+    ? `<p class="hint">Match the target color by adjusting the HSV sliders.</p>
+       <button type="button" class="hint-dismiss" data-action="dismiss-hint">Dismiss</button>`
     : "";
 
   return `
     <div class="shell shell--home">
-      <header class="header">
-        <h1 class="title">Coloreval</h1>
-      </header>
       <main class="main">
-        ${hint}
+        <div class="wordmark">
+          <h1 class="title">Coloreval</h1>
+          ${hint}
+        </div>
         <div class="stack stack--actions">
           <button type="button" class="btn btn--primary" data-action="play">Play</button>
-          <button type="button" class="btn btn--ghost" data-action="history">History</button>
+          <button type="button" class="btn btn--outline" data-action="history">History</button>
         </div>
       </main>
     </div>
@@ -234,16 +271,21 @@ function renderPlay() {
 
   return `
     <div class="shell shell--play">
-      <header class="header header--play">
-        <p class="progress" aria-live="polite"><span class="tabular">${displayRound}</span> / <span class="tabular">${n}</span></p>
-      </header>
+      <div class="topbar">
+        <div class="topbar__left">
+          <button type="button" class="btn--back" data-action="quit">← Quit</button>
+        </div>
+        <div class="topbar__center" aria-live="polite">
+          <span class="tabular">${displayRound}</span><span class="progress-muted"> / ${n}</span>
+        </div>
+        <div class="topbar__right"></div>
+      </div>
       <main class="main main--play">
         <div class="swatch-row">
           <div class="swatch-block">
             <div class="swatch" style="background-color: ${targetCss}" role="img" aria-label="Target color"></div>
             <span class="swatch-label">Target</span>
           </div>
-          <div class="swatch-gap" aria-hidden="true"></div>
           <div class="swatch-block">
             <div id="yours-swatch" class="swatch" style="background-color: ${yoursCss}" role="img" aria-label="Your color"></div>
             <span class="swatch-label">Yours</span>
@@ -265,7 +307,6 @@ function renderPlay() {
         </form>
         <div class="stack stack--actions">
           <button type="button" class="btn btn--primary" data-action="commit">${label}</button>
-          <button type="button" class="link play-quit" data-action="quit">Quit</button>
         </div>
       </main>
     </div>
@@ -276,19 +317,21 @@ function renderResults() {
   const { aggregatePct, rounds } = state.lastResult;
   const dots = rounds
     .map(
-      (_, i) =>
-        `<span class="round-dot" style="--dot-score: ${rounds[i].roundScore}" title="Round ${i + 1}"></span>`,
+      (r, i) =>
+        `<span class="round-dot" style="--dot-score: ${rounds[i].roundScore}; --i: ${i}" title="Round ${i + 1}: ${rounds[i].roundScore}%"></span>`,
     )
     .join("");
 
   return `
     <div class="shell shell--results">
       <main class="main main--results">
-        <p class="score-line"><span class="score tabular">${aggregatePct}</span><span class="score-suffix">% match</span></p>
+        <p class="score-line">
+          <span class="score tabular">${aggregatePct}</span><span class="score-suffix">% match</span>
+        </p>
         <div class="round-strip" aria-hidden="true">${dots}</div>
-        <div class="stack stack--actions">
-          <button type="button" class="btn btn--primary" data-action="again">Again</button>
-          <button type="button" class="btn btn--ghost" data-action="home">Home</button>
+        <div class="stack stack--actions" style="width:100%">
+          <button type="button" class="btn btn--primary" data-action="again">Play again</button>
+          <button type="button" class="btn btn--outline" data-action="home">Home</button>
         </div>
       </main>
     </div>
@@ -300,12 +343,16 @@ function renderHistory() {
   if (sessions.length === 0) {
     return `
       <div class="shell shell--history">
-        <header class="header">
-          <h1 class="title">History</h1>
-        </header>
+        <div class="topbar">
+          <div class="topbar__left">
+            <button type="button" class="btn--back" data-action="home">← Back</button>
+          </div>
+          <div class="topbar__center">History</div>
+          <div class="topbar__right"></div>
+        </div>
         <main class="main">
-          <p class="muted">No runs yet</p>
-          <button type="button" class="btn btn--primary" data-action="play">Play</button>
+          <p class="muted">No runs yet.</p>
+          <button type="button" class="btn btn--primary" data-action="play">Play your first game</button>
         </main>
       </div>
     `;
@@ -326,10 +373,13 @@ function renderHistory() {
 
   return `
     <div class="shell shell--history">
-      <header class="header">
-        <h1 class="title">History</h1>
-        <button type="button" class="link" data-action="home">Home</button>
-      </header>
+      <div class="topbar">
+        <div class="topbar__left">
+          <button type="button" class="btn--back" data-action="home">← Back</button>
+        </div>
+        <div class="topbar__center">History</div>
+        <div class="topbar__right"></div>
+      </div>
       <main class="main">
         <ul class="history-list">${rows}</ul>
       </main>
@@ -377,12 +427,12 @@ function onActionClick(e) {
   }
   if (action === "history") {
     state.screen = "history";
-    render();
+    render("forward");
     return;
   }
   if (action === "home") {
     state.screen = "home";
-    render();
+    render("back");
     return;
   }
   if (action === "again") {
@@ -399,13 +449,13 @@ function onActionClick(e) {
   }
   if (action === "dismiss-hint") {
     savePrefs({ hintDismissed: true });
-    render();
+    render("forward");
     return;
   }
   if (action === "storage-dismiss") {
     state.storageError = null;
     state.pendingSession = null;
-    render();
+    render("forward");
     return;
   }
   if (action === "storage-retry" && state.pendingSession) {
@@ -421,7 +471,7 @@ function onActionClick(e) {
     } else {
       state.storageError = append.error ?? "save";
     }
-    render();
+    render("forward");
     return;
   }
 }

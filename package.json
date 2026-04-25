@@ -18,5 +18,9 @@
     "prettier": "^3.5.3",
     "vite": "^6.2.0",
     "vitest": "^3.0.8"
+  },
+  "dependencies": {
+    "canvas-confetti": "^1.9.4",
+    "motion": "^12.38.0"
   }
 }
