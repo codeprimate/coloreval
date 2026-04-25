@@ -229,9 +229,21 @@ export function initApp(root) {
     return `
       <div class="shell shell--home">
         <main class="main">
-          <div class="wordmark">
-            <h1 class="title">Coloreval</h1>
-            ${hint}
+          <div class="home-hero">
+            <div class="wordmark">
+              <h1 class="title">coloreval</h1>
+              ${hint}
+            </div>
+            <div class="home-icon-wrap">
+              <img
+                class="home-icon"
+                src="/android-chrome-192x192.png"
+                alt=""
+                width="192"
+                height="192"
+                decoding="async"
+              />
+            </div>
           </div>
           <div class="stack stack--actions">
             <button type="button" class="btn btn--primary" data-action="play">Play</button>
@@ -263,7 +275,11 @@ export function initApp(root) {
       <div class="shell shell--play">
         <div class="topbar">
           <div class="topbar__left">
-            <button type="button" class="btn--back" data-action="quit">← Quit</button>
+            <button type="button" class="btn--back btn--back-icon" data-action="quit" aria-label="Quit run">
+              <span aria-hidden="true">←</span>
+              <img src="/favicon-32x32.png" alt="" width="18" height="18" decoding="async" />
+              <span class="visually-hidden">Quit</span>
+            </button>
           </div>
           <div class="topbar__center" aria-live="polite">
             <span class="tabular">${displayRound}</span><span class="progress-muted"> / ${n}</span>
@@ -488,7 +504,9 @@ export function initApp(root) {
   function onActionClick(e) {
     const t = e.target;
     if (!(t instanceof HTMLElement)) return;
-    const action = t.dataset.action;
+    const actionEl = t.closest("[data-action]");
+    if (!(actionEl instanceof HTMLElement)) return;
+    const action = actionEl.dataset.action;
     if (!action) return;
 
     if (action === "play") {
@@ -511,7 +529,7 @@ export function initApp(root) {
       return;
     }
     if (action === "history-toggle") {
-      const indexStr = t.dataset.historyIndex;
+      const indexStr = actionEl.dataset.historyIndex;
       const index = Number(indexStr);
       if (!Number.isInteger(index)) return;
       state.expandedHistoryIndex = state.expandedHistoryIndex === index ? null : index;

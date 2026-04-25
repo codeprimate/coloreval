@@ -171,6 +171,50 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  width: 100%;
+  max-width: none;
+  align-self: start;
+  margin-top: calc(var(--home-art-size) * 0.3);
+  align-items: center;
+  text-align: center;
+  justify-content: flex-start;
+}
+
+.home-icon-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: var(--home-art-size);
+}
+
+.home-hero {
+  --home-hero-width: clamp(18rem, 72vw, 22rem);
+  --home-art-size: clamp(9rem, 44vw, 12.5rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--home-art-size);
+  align-items: start;
+  column-gap: var(--space-2);
+  width: min(100%, var(--home-hero-width));
+  margin-inline: auto;
+}
+
+.shell--home .main {
+  --home-hero-width: clamp(18rem, 72vw, 22rem);
+  align-items: center;
+}
+
+.shell--home .stack--actions {
+  width: min(100%, var(--home-hero-width));
+  margin-inline: auto;
+}
+
+.home-icon {
+  display: block;
+  width: var(--home-art-size);
+  height: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgb(0 0 0 / 0.05);
+  box-shadow: var(--shadow);
 }
 
 .title {
@@ -371,6 +415,19 @@ body {
 .btn--back:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.btn--back-icon {
+  padding: var(--space-1) var(--space-2);
+  min-width: 2.6rem;
+  min-height: 2rem;
+  gap: 0.35rem;
+  justify-content: center;
+}
+
+.btn--back-icon img {
+  display: block;
+  border-radius: 4px;
 }
 
 /* Legacy link class — kept for storage banner */
