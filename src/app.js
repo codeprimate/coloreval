@@ -58,6 +58,8 @@ export function initApp(root) {
     storageError: null,
     /** @type {{ endedAt: string, aggregatePct: number, rounds: object[], runMeta?: object } | null} */
     pendingSession: null,
+    /** @type {{ seed: string, challenge: object | null, retryOfRunId: string | null } | null} */
+    pendingLaunch: null,
     /** @type {number | null} */
     expandedHistoryIndex: null,
   };
@@ -102,9 +104,17 @@ export function initApp(root) {
 
   function quitRun() {
     if (!state.run) return;
+    const restartSeed = state.run.seed;
+    const restartChallenge = state.run.challenge ?? null;
+    const retryOfRunId = state.run.runId ?? null;
     animateQuitShake(() => {
-      if (!confirm("Restart?")) return;
+      if (!confirm("Go back to start?")) return;
       clearDraft();
+      state.pendingLaunch = {
+        seed: restartSeed,
+        challenge: restartChallenge,
+        retryOfRunId,
+      };
       state.run = null;
       state.screen = "home";
       render("back");
@@ -263,14 +273,21 @@ export function initApp(root) {
   }
 
   function renderHome() {
-    const launch = parseRunLaunchContext({
+    const urlLaunch = parseRunLaunchContext({
       search: window.location.search,
       hash: window.location.hash,
     });
+    const launch = state.pendingLaunch ?? urlLaunch;
+    const hasChallengeLaunch = Boolean(
+      (state.pendingLaunch && state.pendingLaunch.challenge) || urlLaunch.challenge,
+    );
     const playLabel =
       launch.challenge && typeof launch.challenge.authorName === "string"
         ? `Play vs. ${escapeHtml(launch.challenge.authorName)}`
         : "Play";
+    const playNewButton = hasChallengeLaunch
+      ? `<button type="button" class="btn btn--outline" data-action="play-new">Play new</button>`
+      : "";
     const prefs = loadPrefs();
     const hint = !prefs.hintDismissed
       ? `<p class="hint">Match the target color by adjusting the HSV sliders.</p>
@@ -298,6 +315,7 @@ export function initApp(root) {
           </div>
           <div class="stack stack--actions">
             <button type="button" class="btn btn--primary" data-action="play">${playLabel}</button>
+            ${playNewButton}
             <button type="button" class="btn btn--outline" data-action="history">Top 10</button>
           </div>
         </main>
@@ -682,19 +700,26 @@ export function initApp(root) {
               `
             : "";
         return `
-          <li class="history-item ${isExpanded ? "history-item--expanded" : ""}">
+          <li
+            class="history-item ${isExpanded ? "history-item--expanded" : ""}"
+            data-action="history-toggle"
+            data-history-index="${historyIndex}"
+          >
             <button
               type="button"
               class="history-row"
-              data-action="history-toggle"
-              data-history-index="${historyIndex}"
               aria-expanded="${isExpanded ? "true" : "false"}"
             >
               <span class="history-date">${escapeHtml(dateStr)}</span>
-              <span class="tabular history-pct">${s.aggregatePct}%</span>
             </button>
             <div class="history-row-actions">
+              ${
+                challengeMeta
+                  ? ""
+                  : `<button type="button" class="btn--icon history-share-btn" data-action="history-share" data-history-index="${historyIndex}" aria-label="Share this run as a challenge" title="Share this run as a challenge">🥊</button>`
+              }
               <button type="button" class="btn--icon history-retry-btn" data-action="history-retry" data-history-index="${historyIndex}" ${canRetry ? "" : "disabled"} aria-label="Retry this run" title="${canRetry ? "Retry this run" : "Retry unavailable"}">↻</button>
+              <span class="tabular history-pct">${s.aggregatePct}%</span>
             </div>
             ${
               challengeMeta
@@ -817,6 +842,28 @@ export function initApp(root) {
     });
   }
 
+  /**
+   * @param {number} historyIndex
+   */
+  function openShareFromHistoryIndex(historyIndex) {
+    const sessions = selectTopSessionsByScore(loadSessions(), 10);
+    const session = sessions[historyIndex];
+    if (!session || !session.runMeta || typeof session.runMeta.seed !== "string") return;
+    state.lastResult = {
+      aggregatePct: session.aggregatePct,
+      rounds: session.rounds,
+      runMeta: session.runMeta,
+    };
+    state.challengeShare = {
+      username: "",
+      url: null,
+      qrDataUrl: null,
+      error: null,
+    };
+    state.screen = "challenge-share";
+    render("forward");
+  }
+
   async function generateChallengeLink() {
     if (
       !state.lastResult ||
@@ -878,7 +925,7 @@ export function initApp(root) {
    * @param {HTMLElement} rowButton
    * @param {number} index
    */
-  function toggleHistoryRowInPlace(rowButton, index) {
+  function toggleHistoryRowInPlace(focusEl, index) {
     const allItems = root.querySelectorAll(".history-item");
     allItems.forEach((itemEl, itemIndex) => {
       if (!(itemEl instanceof HTMLElement)) return;
@@ -896,7 +943,7 @@ export function initApp(root) {
     });
     state.expandedHistoryIndex = state.expandedHistoryIndex === index ? null : index;
     // Keep focus on clicked control for keyboard users after DOM class updates.
-    rowButton.focus();
+    focusEl.focus();
   }
 
   /** @param {Event} e */
@@ -909,7 +956,22 @@ export function initApp(root) {
     if (!action) return;
 
     if (action === "play") {
-      startNewRun();
+      if (state.pendingLaunch) {
+        const pending = state.pendingLaunch;
+        state.pendingLaunch = null;
+        startNewRun({
+          seed: pending.seed,
+          challenge: pending.challenge,
+          retryOfRunId: pending.retryOfRunId,
+        });
+      } else {
+        startNewRun();
+      }
+      return;
+    }
+    if (action === "play-new") {
+      state.pendingLaunch = null;
+      startNewRun({ forceRandom: true });
       return;
     }
     if (action === "history") {
@@ -950,7 +1012,9 @@ export function initApp(root) {
       const indexStr = actionEl.dataset.historyIndex;
       const index = Number(indexStr);
       if (!Number.isInteger(index)) return;
-      toggleHistoryRowInPlace(actionEl, index);
+      const itemEl = actionEl.closest(".history-item");
+      const rowButton = itemEl instanceof HTMLElement ? itemEl.querySelector(".history-row") : null;
+      toggleHistoryRowInPlace(rowButton instanceof HTMLElement ? rowButton : actionEl, index);
       return;
     }
     if (action === "history-retry") {
@@ -958,6 +1022,13 @@ export function initApp(root) {
       const index = Number(indexStr);
       if (!Number.isInteger(index)) return;
       retryFromHistoryIndex(index);
+      return;
+    }
+    if (action === "history-share") {
+      const indexStr = actionEl.dataset.historyIndex;
+      const index = Number(indexStr);
+      if (!Number.isInteger(index)) return;
+      openShareFromHistoryIndex(index);
       return;
     }
     if (action === "commit") {

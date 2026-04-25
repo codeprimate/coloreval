@@ -841,7 +841,7 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) calc(var(--space-4) + 2.2rem) var(--space-3) var(--space-4);
+  padding: var(--space-3) calc(var(--space-4) + 6.6rem) var(--space-3) var(--space-4);
   width: 100%;
   border: 0;
   background: transparent;
@@ -854,12 +854,21 @@ body {
 
 .history-row-actions {
   position: absolute;
-  top: var(--space-2);
+  top: 50%;
   right: var(--space-3);
+  transform: translateY(-50%);
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 .history-retry-btn {
+  width: 2rem;
+  height: 2rem;
+}
+
+.history-share-btn {
   width: 2rem;
   height: 2rem;
 }
@@ -893,6 +902,8 @@ body {
   font-weight: 700;
   font-size: var(--text-base);
   letter-spacing: -0.02em;
+  text-align: right;
+  min-width: 3.1rem;
 }
 
 .history-detail {
@@ -1005,7 +1016,8 @@ body {
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
-  text-align: center;
+  text-align: right;
+  justify-self: end;
 }
 
 .history-round-swatch {
@@ -1033,4 +1045,6 @@ body {
   font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: -0.01em;
+  text-align: right;
+  justify-self: end;
 }
