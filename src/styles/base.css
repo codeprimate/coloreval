@@ -587,6 +587,10 @@ body {
 /* ─── Results screen ─────────────────────────────────────── */
 .score-line {
   margin: 0;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  column-gap: clamp(0.45rem, 1.8vw, 0.8rem);
   line-height: 1;
 }
 
@@ -597,10 +601,28 @@ body {
 }
 
 .score-suffix {
-  margin-left: 0.1em;
-  font-size: var(--text-lg);
+  font-size: clamp(1.1rem, 3.2vw, 1.35rem);
   font-weight: 500;
   color: var(--muted);
+  letter-spacing: -0.01em;
+  transform: translateX(-0.22rem);
+}
+
+.score-meta {
+  display: grid;
+  grid-template-rows: auto auto;
+  justify-items: start;
+  row-gap: 0.12rem;
+  padding-bottom: 0.55rem;
+}
+
+.score-brand {
+  margin: 0;
+  font-size: clamp(1.55rem, 5.4vw, 2.05rem);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
 .round-strip {

@@ -364,7 +364,11 @@ export function initApp(root) {
       <div class="shell shell--results">
         <main class="main main--results">
           <p class="score-line">
-            <span class="score tabular">${aggregatePct}</span><span class="score-suffix">% match</span>
+            <span class="score tabular">${aggregatePct}</span>
+            <span class="score-meta">
+              <span class="score-brand title">coloreval</span>
+              <span class="score-suffix">% match</span>
+            </span>
           </p>
           <div class="round-strip" aria-hidden="true">${dots}</div>
           <div class="history-detail" style="width:100%">
@@ -396,7 +400,7 @@ export function initApp(root) {
               <button type="button" class="btn--back" data-action="home">← Back</button>
             </div>
             <div class="topbar__center">Top 10</div>
-            <div class="topbar__right"></div>
+            <div class="topbar__right title">coloreval</div>
           </div>
           <main class="main">
             <p class="muted">No Top 10 runs yet.</p>
@@ -465,7 +469,7 @@ export function initApp(root) {
             <button type="button" class="btn--back" data-action="home">← Back</button>
           </div>
           <div class="topbar__center">Top 10</div>
-          <div class="topbar__right"></div>
+          <div class="topbar__right title">coloreval</div>
         </div>
         <main class="main">
           <ul class="history-list">${rows}</ul>
