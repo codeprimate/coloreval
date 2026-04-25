@@ -391,6 +391,10 @@ export function initApp(root) {
       challengeMeta && typeof challengeMeta.authorName === "string"
         ? challengeMeta.authorName
         : null;
+    const challengerTotalPct =
+      challengeMeta && typeof challengeMeta.authorScore === "number"
+        ? challengeMeta.authorScore
+        : null;
     const challengerRounds = Array.isArray(challengeMeta?.challengerRounds)
       ? challengeMeta.challengerRounds
       : null;
@@ -398,6 +402,18 @@ export function initApp(root) {
       Boolean(challengerName) &&
       Array.isArray(challengerRounds) &&
       challengerRounds.length === rounds.length;
+    const showWinnerWreaths =
+      showChallengerColumn &&
+      typeof challengerTotalPct === "number" &&
+      aggregatePct > challengerTotalPct;
+    const winnerColumn =
+      showChallengerColumn && typeof challengerTotalPct === "number"
+        ? aggregatePct > challengerTotalPct
+          ? "yours"
+          : challengerTotalPct > aggregatePct
+            ? "challenger"
+            : null
+        : null;
     const dots = rounds
       .map(
         (r, i) =>
@@ -425,7 +441,6 @@ export function initApp(root) {
           : "";
         return `
           <li class="history-round-row ${showChallengerColumn ? "history-round-row--challenge" : ""}">
-            <span class="history-round-index tabular">R${roundIndex + 1}</span>
             <span class="history-round-swatch" style="background-color: ${targetCss}" aria-label="Round ${roundIndex + 1} target color"></span>
             <span class="history-round-score tabular">${round.roundScore}%</span>
             <span class="history-round-swatch${yourWinnerClass}" style="background-color: ${userCss}" aria-label="Round ${roundIndex + 1} your color"></span>
@@ -434,21 +449,45 @@ export function initApp(root) {
         `;
       })
       .join("");
+    const challengeTotalsRow =
+      showChallengerColumn && typeof challengerTotalPct === "number"
+        ? `
+            <div class="history-round-totals history-round-totals--challenge" aria-label="Challenge totals">
+              <span></span>
+              <span></span>
+              <span class="history-round-total-pct tabular">${aggregatePct}%</span>
+              <span></span>
+              <span class="history-round-total-pct tabular">${challengerTotalPct}%</span>
+            </div>
+          `
+        : "";
 
     return `
       <div class="shell shell--results">
         <main class="main main--results">
           <p class="score-line">
+            ${showWinnerWreaths ? '<span class="score-wreath" aria-hidden="true">🏆</span>' : ""}
             <span class="score tabular">${aggregatePct}</span>
             <span class="score-meta">
               <span class="score-brand title">coloreval</span>
               <span class="score-suffix">% match</span>
             </span>
+            ${showWinnerWreaths ? '<span class="score-wreath" aria-hidden="true">🏆</span>' : ""}
           </p>
           <div class="round-strip" aria-hidden="true">${dots}</div>
           <div class="history-detail" style="width:100%">
+            ${
+              showChallengerColumn
+                ? `<div class="history-round-awards history-round-awards--challenge" aria-hidden="true">
+                     <span></span>
+                     <span></span>
+                     <span class="history-round-award">${winnerColumn === "yours" ? "🏆" : ""}</span>
+                     <span></span>
+                     <span class="history-round-award">${winnerColumn === "challenger" ? "🏆" : ""}</span>
+                   </div>`
+                : ""
+            }
             <div class="history-round-columns ${showChallengerColumn ? "history-round-columns--challenge" : ""}" aria-hidden="true">
-              <span></span>
               <span class="history-round-column-label">Target</span>
               <span></span>
               <span class="history-round-column-label">Yours</span>
@@ -459,6 +498,7 @@ export function initApp(root) {
               }
             </div>
             <ul class="history-round-list">${roundRows}</ul>
+            ${challengeTotalsRow}
           </div>
           <div class="stack stack--actions" style="width:100%">
             <button type="button" class="btn btn--primary" data-action="again">Play again</button>
@@ -577,20 +617,66 @@ export function initApp(root) {
         const isExpanded = state.expandedHistoryIndex === historyIndex;
         const canRetry = Boolean(s.runMeta && typeof s.runMeta.seed === "string");
         const challengeMeta = s.runMeta && s.runMeta.challenge ? s.runMeta.challenge : null;
+        const challengerName =
+          challengeMeta && typeof challengeMeta.authorName === "string"
+            ? challengeMeta.authorName
+            : null;
+        const challengerRounds = Array.isArray(challengeMeta?.challengerRounds)
+          ? challengeMeta.challengerRounds
+          : null;
+        const showChallengerColumn =
+          Boolean(challengerName) &&
+          Array.isArray(challengerRounds) &&
+          challengerRounds.length === s.rounds.length;
+        const challengerTotalPct =
+          challengeMeta && typeof challengeMeta.authorScore === "number"
+            ? challengeMeta.authorScore
+            : null;
+        const challengeBadgeIcon =
+          typeof challengerTotalPct === "number" && s.aggregatePct > challengerTotalPct
+            ? "🏆"
+            : "🥊";
         const roundRows = s.rounds
           .map((round, roundIndex) => {
             const targetCss = hsvToCssColor(round.targetHsv);
             const userCss = hsvToCssColor(round.userHsv);
+            const challengerRound = showChallengerColumn ? challengerRounds[roundIndex] : null;
+            const yourWinnerClass =
+              challengerRound && round.roundScore > challengerRound.roundScore
+                ? " history-round-swatch--winner"
+                : "";
+            const challengerLoserClass =
+              challengerRound && challengerRound.roundScore > round.roundScore
+                ? " history-round-swatch--loser"
+                : "";
+            const challengerCell = showChallengerColumn
+              ? `
+                <span class="history-round-score tabular">${challengerRound.roundScore}%</span>
+                <span class="history-round-swatch${challengerLoserClass}" style="background-color: ${hsvToCssColor(challengerRound.userHsv)}" aria-label="Round ${roundIndex + 1} challenger color"></span>
+              `
+              : "";
             return `
-              <li class="history-round-row">
-                <span class="history-round-index tabular">R${roundIndex + 1}</span>
+              <li class="history-round-row ${showChallengerColumn ? "history-round-row--challenge" : ""}">
                 <span class="history-round-swatch" style="background-color: ${targetCss}" aria-label="Round ${roundIndex + 1} target color"></span>
                 <span class="history-round-score tabular">${round.roundScore}%</span>
-                <span class="history-round-swatch" style="background-color: ${userCss}" aria-label="Round ${roundIndex + 1} your color"></span>
+                <span class="history-round-swatch${yourWinnerClass}" style="background-color: ${userCss}" aria-label="Round ${roundIndex + 1} your color"></span>
+                ${challengerCell}
               </li>
             `;
           })
           .join("");
+        const challengeTotalsRow =
+          showChallengerColumn && typeof challengerTotalPct === "number"
+            ? `
+                <div class="history-round-totals history-round-totals--challenge" aria-label="Challenge totals">
+                  <span></span>
+                  <span></span>
+                  <span class="history-round-total-pct tabular">${s.aggregatePct}%</span>
+                  <span></span>
+                  <span class="history-round-total-pct tabular">${challengerTotalPct}%</span>
+                </div>
+              `
+            : "";
         return `
           <li class="history-item ${isExpanded ? "history-item--expanded" : ""}">
             <button
@@ -608,18 +694,23 @@ export function initApp(root) {
             </div>
             ${
               challengeMeta
-                ? `<p class="history-challenge-note">⚑ ${escapeHtml(challengeMeta.authorName)}</p>`
+                ? `<p class="history-challenge-note">${challengeBadgeIcon} vs. ${escapeHtml(challengeMeta.authorName)}</p>`
                 : ""
             }
             <div class="history-detail-wrap" aria-hidden="${isExpanded ? "false" : "true"}">
               <div class="history-detail">
-                <div class="history-round-columns" aria-hidden="true">
-                  <span></span>
+                <div class="history-round-columns ${showChallengerColumn ? "history-round-columns--challenge" : ""}" aria-hidden="true">
                   <span class="history-round-column-label">Target</span>
                   <span></span>
                   <span class="history-round-column-label">Yours</span>
+                  ${
+                    showChallengerColumn
+                      ? `<span></span><span class="history-round-column-label">${escapeHtml(challengerName)}</span>`
+                      : ""
+                  }
                 </div>
                 <ul class="history-round-list">${roundRows}</ul>
+                ${challengeTotalsRow}
               </div>
             </div>
           </li>
