@@ -46,6 +46,7 @@ const state = {
 };
 
 const root = document.getElementById("app");
+let sliderHintTimer = null;
 
 function persistDraft() {
   if (!state.run) return;
@@ -265,6 +266,7 @@ function renderPlay() {
   const n = run.roundsPerRun;
   const isLast = idx === n - 1;
   const label = isLast ? "Finish" : "Next";
+  const isCommitDisabled = !run.hasInteractedThisRound;
   const { hue, sat, val } = hsvToRangeValues(run.userHsv);
   const targetCss = hsvToCssColor(target);
   const yoursCss = hsvToCssColor(run.userHsv);
@@ -305,8 +307,12 @@ function renderPlay() {
             <input id="value" name="value" type="range" min="0" max="100" value="${val}" />
           </div>
         </form>
+        <div class="slider-hint" aria-live="polite">
+          <span class="slider-hint-arrow" data-role="slider-hint-arrow" aria-hidden="true">↕</span>
+          <span class="visually-hidden">Adjust a slider to continue</span>
+        </div>
         <div class="stack stack--actions">
-          <button type="button" class="btn btn--primary" data-action="commit">${label}</button>
+          <button type="button" class="btn btn--primary" data-action="commit" ${isCommitDisabled ? "disabled" : ""}>${label}</button>
         </div>
       </main>
     </div>
@@ -402,16 +408,47 @@ function bindScreenHandlers() {
 
   const form = root.querySelector("#play-form");
   if (form instanceof HTMLFormElement && state.run) {
+    const commitBtn = root.querySelector('[data-action="commit"]');
+    const actionStack = root.querySelector(".stack--actions");
     const sync = () => {
       Object.assign(state.run.userHsv, parseSliders(form));
+      state.run.hasInteractedThisRound = true;
       const yours = root.querySelector("#yours-swatch");
       if (yours instanceof HTMLElement) {
         yours.style.backgroundColor = hsvToCssColor(state.run.userHsv);
       }
+      if (commitBtn instanceof HTMLButtonElement) {
+        commitBtn.disabled = false;
+      }
     };
     form.addEventListener("input", sync);
     form.addEventListener("change", sync);
+    if (actionStack instanceof HTMLElement) {
+      const showHintIfCommitDisabled = () => {
+        if (!(commitBtn instanceof HTMLButtonElement) || !commitBtn.disabled) return;
+        flashSliderHint();
+      };
+      actionStack.addEventListener("mouseover", showHintIfCommitDisabled);
+      actionStack.addEventListener("pointerdown", showHintIfCommitDisabled);
+    }
   }
+}
+
+function flashSliderHint() {
+  if (!root) return;
+  const arrow = root.querySelector('[data-role="slider-hint-arrow"]');
+  if (!(arrow instanceof HTMLElement)) return;
+  arrow.classList.remove("slider-hint-arrow--active");
+  // Force a restart when repeatedly hovering the disabled button.
+  void arrow.offsetWidth;
+  arrow.classList.add("slider-hint-arrow--active");
+  if (sliderHintTimer !== null) {
+    window.clearTimeout(sliderHintTimer);
+  }
+  sliderHintTimer = window.setTimeout(() => {
+    arrow.classList.remove("slider-hint-arrow--active");
+    sliderHintTimer = null;
+  }, 1300);
 }
 
 /** @param {Event} e */
@@ -440,6 +477,10 @@ function onActionClick(e) {
     return;
   }
   if (action === "commit") {
+    if (state.run && !state.run.hasInteractedThisRound) {
+      flashSliderHint();
+      return;
+    }
     onCommitRound();
     return;
   }

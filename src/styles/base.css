@@ -314,6 +314,12 @@ body {
   outline-offset: 2px;
 }
 
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 /* Danger/escape link — only for Quit */
 .btn--danger-link {
   background: none;
@@ -430,6 +436,59 @@ body {
   flex-direction: column;
   gap: var(--space-3);
   margin: 0;
+}
+
+.slider-hint {
+  min-height: 1.15rem;
+  margin-top: calc(var(--space-2) * -1);
+}
+
+.slider-hint-arrow {
+  display: inline-block;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  opacity: 0;
+  transform: translateX(0);
+  pointer-events: none;
+}
+
+.slider-hint-arrow--active {
+  animation: slider-hint-pulse 1.2s var(--ease-out) both;
+}
+
+@keyframes slider-hint-pulse {
+  0% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-0.25rem);
+  }
+  40% {
+    opacity: 1;
+    transform: translateX(0.05rem);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(-0.15rem);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .field {

@@ -35,6 +35,7 @@ export function createRun(roundsPerRun = ROUNDS_PER_RUN, rng = Math.random) {
     targets,
     committed: [],
     userHsv: { ...NEUTRAL_USER_HSV },
+    hasInteractedThisRound: false,
     startedAt: new Date().toISOString(),
   };
 }
@@ -86,6 +87,7 @@ export function commitCurrentRound(run) {
     return { done: true };
   }
   run.userHsv = { ...NEUTRAL_USER_HSV };
+  run.hasInteractedThisRound = false;
   return { done: false };
 }
 
@@ -167,6 +169,12 @@ export function hydrateRunFromDraft(draft) {
       roundScore: c.roundScore,
     })),
     userHsv: { h: userHsv.h, s: userHsv.s, v: userHsv.v },
+    hasInteractedThisRound:
+      typeof draft.hasInteractedThisRound === "boolean"
+        ? draft.hasInteractedThisRound
+        : userHsv.h !== NEUTRAL_USER_HSV.h ||
+          userHsv.s !== NEUTRAL_USER_HSV.s ||
+          userHsv.v !== NEUTRAL_USER_HSV.v,
     startedAt: typeof draft.startedAt === "string" ? draft.startedAt : new Date().toISOString(),
   };
 }
@@ -185,6 +193,7 @@ export function runToDraftSnapshot(run) {
       roundScore: c.roundScore,
     })),
     userHsv: { ...run.userHsv },
+    hasInteractedThisRound: Boolean(run.hasInteractedThisRound),
     startedAt: run.startedAt,
     updatedAt: new Date().toISOString(),
   };

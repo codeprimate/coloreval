@@ -19,6 +19,7 @@ describe("createRun", () => {
     expect(run.targets).toHaveLength(3);
     expect(run.committed).toHaveLength(0);
     expect(run.userHsv).toEqual({ ...NEUTRAL_USER_HSV });
+    expect(run.hasInteractedThisRound).toBe(false);
   });
 
   it("uses ROUNDS_PER_RUN by default", () => {
@@ -30,10 +31,12 @@ describe("createRun", () => {
 describe("commitCurrentRound", () => {
   it("advances through all rounds", () => {
     const run = createRun(2, () => 0.5);
+    run.hasInteractedThisRound = true;
     run.userHsv = { h: 10, s: 0.5, v: 0.5 };
     expect(commitCurrentRound(run).done).toBe(false);
     expect(run.committed).toHaveLength(1);
     expect(run.userHsv).toEqual({ ...NEUTRAL_USER_HSV });
+    expect(run.hasInteractedThisRound).toBe(false);
     run.userHsv = { h: 20, s: 0.6, v: 0.6 };
     expect(commitCurrentRound(run).done).toBe(true);
     expect(run.committed).toHaveLength(2);
@@ -59,12 +62,24 @@ describe("draft round-trip", () => {
   it("hydrateRunFromDraft restores playable run", () => {
     const run = createRun(3, () => 0.42);
     run.userHsv = { h: 99, s: 0.3, v: 0.8 };
+    run.hasInteractedThisRound = true;
     const snap = runToDraftSnapshot(run);
     const restored = hydrateRunFromDraft(snap);
     expect(restored).not.toBeNull();
     expect(restored.targets).toEqual(run.targets);
     expect(restored.committed).toEqual(run.committed);
     expect(restored.userHsv).toEqual(run.userHsv);
+    expect(restored.hasInteractedThisRound).toBe(true);
+  });
+
+  it("infers slider interaction for legacy drafts", () => {
+    const run = createRun(2, () => 0.42);
+    run.userHsv = { h: 99, s: 0.3, v: 0.8 };
+    const snap = runToDraftSnapshot(run);
+    delete snap.hasInteractedThisRound;
+    const restored = hydrateRunFromDraft(snap);
+    expect(restored).not.toBeNull();
+    expect(restored.hasInteractedThisRound).toBe(true);
   });
 
   it("returns null for invalid draft", () => {
