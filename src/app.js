@@ -92,7 +92,7 @@ export function initApp(root) {
   function quitRun() {
     if (!state.run) return;
     animateQuitShake(() => {
-      if (!confirm("Abandon this run? Progress will not be saved.")) return;
+      if (!confirm("Restart?")) return;
       clearDraft();
       state.run = null;
       state.screen = "home";
@@ -281,14 +281,13 @@ export function initApp(root) {
           <div class="topbar__left">
             <button type="button" class="btn--back btn--back-icon" data-action="quit" aria-label="Quit run">
               <span aria-hidden="true">←</span>
-              <img src="./favicon-32x32.png" alt="" width="18" height="18" decoding="async" />
               <span class="visually-hidden">Quit</span>
             </button>
           </div>
           <div class="topbar__center" aria-live="polite">
             <span class="tabular">${displayRound}</span><span class="progress-muted"> / ${n}</span>
           </div>
-          <div class="topbar__right"></div>
+          <div class="topbar__right title">coloreval</div>
         </div>
         <main class="main main--play">
           <div class="swatch-row">
