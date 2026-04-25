@@ -524,10 +524,14 @@ export function initApp(root) {
       )
       .join("");
     const username = escapeHtml(state.challengeShare.username);
+    const smsHref = state.challengeShare.url
+      ? `sms:?&body=${encodeURIComponent(`Try my coloreval challenge: ${state.challengeShare.url}`)}`
+      : "";
     const urlPreview = state.challengeShare.url
       ? `
       <div class="challenge-link-row">
         <a class="challenge-link-title" href="${state.challengeShare.url}" target="_blank" rel="noopener noreferrer">coloreval Challenge</a>
+        <a class="btn--icon challenge-copy-btn challenge-sms-link" href="${smsHref}" aria-label="Share challenge via text message">📱</a>
         <button type="button" class="btn--icon challenge-copy-btn" data-action="challenge-copy" aria-label="Copy challenge link">⧉</button>
       </div>
     `

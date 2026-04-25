@@ -786,6 +786,10 @@ body {
   opacity: 0.7;
 }
 
+.challenge-sms-link {
+  text-decoration: none;
+}
+
 .challenge-link-title {
   color: var(--accent);
   font-size: var(--text-sm);
