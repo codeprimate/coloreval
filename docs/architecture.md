@@ -32,7 +32,7 @@ flowchart LR
 ## Game layer (implemented)
 
 - **Modules** — [`../src/color.js`](../src/color.js), [`../src/run.js`](../src/run.js), [`../src/storage.js`](../src/storage.js), [`../src/console-helpers.js`](../src/console-helpers.js), [`../src/main.js`](../src/main.js): color math, run lifecycle (`ROUNDS_PER_RUN`, neutral reset between rounds), storage I/O, browser console helpers, UI + bootstrap.
-- **Match %** — Euclidean distance in **linear** sRGB, mapped to 0–100 with divisor `√3` (unit cube diagonal). Same function feeds live commits and stored aggregates (`matchPercentHsv` in [`../src/color.js`](../src/color.js)).
+- **Match %** — Perceptual: Euclidean distance in **OKLab** (`oklabDistance`), mapped to 0–100 by a **Gaussian falloff** `100 · exp(−(d/σ)²)` with `σ = OKLAB_SCORE_SIGMA = 0.15` (`scoreFromOklabDistance`). The squared exponent is flat near `d = 0`, so perceptually indistinguishable colors score 100, then drops steeply through the middle so visibly different colors lose ground quickly, and tapers to ~0 for random pairs. The same function feeds live commits and stored aggregates (`matchPercentHsv` in [`../src/color.js`](../src/color.js)).
 - **Persistence keys** (see [`../src/storage.js`](../src/storage.js)):
   - `coloreval_sessions_v1` — `{ schemaVersion, sessions: [{ id, endedAt, aggregatePct, rounds[] }] }` (append on **Finish**).
   - `coloreval_draft_v1` — draft snapshot from `runToDraftSnapshot` + `schemaVersion` (save on run start, each **Next**, `pagehide` / hidden `visibilitychange`; cleared on **Finish** or new **Play**).

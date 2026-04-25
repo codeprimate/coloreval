@@ -1,13 +1,19 @@
 /**
  * Color utilities: HSV (h° 0–360, s/v 0–1) ↔ sRGB (0–1), random targets, match %.
  *
- * **Match score:** Euclidean distance in OKLab (perceptual space), mapped to 0–100
- * with an exponential decay so random guesses are intentionally low while exact
- * matches still score 100.
+ * **Match score:** Euclidean distance in OKLab (perceptual space) mapped to 0–100
+ * with a **Gaussian falloff** `100 · exp(−(d/σ)²)`. The squared exponent is flat
+ * near `d = 0`, so perceptually indistinguishable colors score 100 (rewarding
+ * near-perfection), then drops steeply through the middle so visibly different
+ * colors lose ground quickly, and tapers to ~0 for random pairs.
  */
 
-/** Exponential decay constant for perceptual score mapping in OKLab. */
-export const OKLAB_SCORE_DECAY = 0.1;
+/**
+ * Gaussian width for the OKLab → score mapping. The 50%-score distance is
+ * `σ · √ln 2 ≈ 0.83·σ`. Lower σ = stricter (only very close colors score high);
+ * higher σ = more generous everywhere.
+ */
+export const OKLAB_SCORE_SIGMA = 0.15;
 
 /**
  * @param {number} x sRGB channel 0–1
@@ -136,16 +142,36 @@ export function rgbToHsv(rgb) {
 }
 
 /**
+ * Perceptual distance between two sRGB colors, measured in OKLab.
+ * @param {{ r: number, g: number, b: number }} rgbA sRGB 0–1
+ * @param {{ r: number, g: number, b: number }} rgbB sRGB 0–1
+ * @returns {number} Euclidean OKLab distance (≥ 0)
+ */
+export function oklabDistance(rgbA, rgbB) {
+  const oa = srgbToOklab(rgbA);
+  const ob = srgbToOklab(rgbB);
+  return Math.hypot(oa.l - ob.l, oa.a - ob.a, oa.b - ob.b);
+}
+
+/**
+ * Maps an OKLab distance to an integer 0–100 score using a Gaussian falloff.
+ * Flat near 0 (rewards perfection), steep through the middle, ~0 for random pairs.
+ * @param {number} d OKLab distance (≥ 0)
+ * @returns {number} integer 0–100
+ */
+export function scoreFromOklabDistance(d) {
+  if (!Number.isFinite(d) || d <= 0) return 100;
+  const pct = 100 * Math.exp(-((d / OKLAB_SCORE_SIGMA) ** 2));
+  return Math.round(pct);
+}
+
+/**
  * @param {{ h: number, s: number, v: number }} a
  * @param {{ h: number, s: number, v: number }} b
  * @returns {number} integer 0–100
  */
 export function matchPercentHsv(a, b) {
-  const oa = srgbToOklab(hsvToRgb(a));
-  const ob = srgbToOklab(hsvToRgb(b));
-  const d = Math.hypot(oa.l - ob.l, oa.a - ob.a, oa.b - ob.b);
-  const pct = 100 * Math.exp(-d / OKLAB_SCORE_DECAY);
-  return Math.round(pct);
+  return scoreFromOklabDistance(oklabDistance(hsvToRgb(a), hsvToRgb(b)));
 }
 
 /** Bounds for random targets — avoids imperceptibly dull swatches. */

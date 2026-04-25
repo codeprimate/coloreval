@@ -3,11 +3,13 @@ import {
   hsvToRgb,
   rgbToHsv,
   matchPercentHsv,
+  oklabDistance,
+  scoreFromOklabDistance,
   randomTargetHsv,
   srgbToLinearRgb,
   linearRgbToSrgb,
   srgbToOklab,
-  OKLAB_SCORE_DECAY,
+  OKLAB_SCORE_SIGMA,
   TARGET_S_MIN,
   TARGET_V_MIN,
 } from "../src/color.js";
@@ -53,6 +55,18 @@ describe("matchPercentHsv", () => {
     expect(matchPercentHsv(c, c)).toBe(100);
   });
 
+  it("returns 100 for sub-JND perceptual differences", () => {
+    const target = { h: 200, s: 0.6, v: 0.7 };
+    const nearlyIdentical = { h: 200.05, s: 0.6, v: 0.7 };
+    expect(matchPercentHsv(target, nearlyIdentical)).toBe(100);
+  });
+
+  it("scores visibly close colors in the high 80s or better", () => {
+    const target = { h: 200, s: 0.6, v: 0.7 };
+    const close = { h: 198, s: 0.58, v: 0.71 };
+    expect(matchPercentHsv(target, close)).toBeGreaterThanOrEqual(85);
+  });
+
   it("increases when user approaches target", () => {
     const target = { h: 200, s: 0.6, v: 0.7 };
     const far = { h: 20, s: 0.2, v: 0.2 };
@@ -68,6 +82,61 @@ describe("matchPercentHsv", () => {
     const p = matchPercentHsv(a, b);
     expect(p).toBeGreaterThanOrEqual(0);
     expect(p).toBeLessThanOrEqual(100);
+  });
+
+  it("scores wildly different colors near zero", () => {
+    expect(matchPercentHsv({ h: 0, s: 1, v: 1 }, { h: 240, s: 1, v: 1 })).toBeLessThan(5);
+  });
+});
+
+describe("oklabDistance", () => {
+  it("is zero for identical colors", () => {
+    const rgb = { r: 0.4, g: 0.7, b: 0.2 };
+    expect(oklabDistance(rgb, rgb)).toBe(0);
+  });
+
+  it("is symmetric", () => {
+    const a = { r: 0.1, g: 0.5, b: 0.9 };
+    const b = { r: 0.8, g: 0.3, b: 0.2 };
+    expect(oklabDistance(a, b)).toBeCloseTo(oklabDistance(b, a), 12);
+  });
+
+  it("grows with perceptual difference", () => {
+    const target = { r: 0.5, g: 0.5, b: 0.5 };
+    const close = { r: 0.52, g: 0.5, b: 0.5 };
+    const far = { r: 1, g: 0, b: 0 };
+    expect(oklabDistance(target, close)).toBeLessThan(oklabDistance(target, far));
+  });
+});
+
+describe("scoreFromOklabDistance", () => {
+  it("returns 100 at distance 0", () => {
+    expect(scoreFromOklabDistance(0)).toBe(100);
+  });
+
+  it("is monotonically non-increasing", () => {
+    const points = [0, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1];
+    const scores = points.map(scoreFromOklabDistance);
+    for (let i = 1; i < scores.length; i += 1) {
+      expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
+    }
+  });
+
+  it("hits ~50 near σ · √ln 2", () => {
+    const halfDistance = OKLAB_SCORE_SIGMA * Math.sqrt(Math.LN2);
+    expect(scoreFromOklabDistance(halfDistance)).toBe(50);
+  });
+
+  it("treats sub-JND distances (~0.005) as a perfect score", () => {
+    expect(scoreFromOklabDistance(0.005)).toBe(100);
+  });
+
+  it("rewards visibly close matches generously (~0.05 → ≥ 85)", () => {
+    expect(scoreFromOklabDistance(0.05)).toBeGreaterThanOrEqual(85);
+  });
+
+  it("punishes very different colors (~0.3 → ≤ 5)", () => {
+    expect(scoreFromOklabDistance(0.3)).toBeLessThanOrEqual(5);
   });
 });
 
@@ -103,8 +172,8 @@ describe("randomTargetHsv", () => {
   });
 });
 
-describe("OKLAB_SCORE_DECAY", () => {
-  it("uses a steep decay for low random-match scores", () => {
-    expect(OKLAB_SCORE_DECAY).toBeCloseTo(0.1);
+describe("OKLAB_SCORE_SIGMA", () => {
+  it("is the documented Gaussian width", () => {
+    expect(OKLAB_SCORE_SIGMA).toBeCloseTo(0.15);
   });
 });
