@@ -136,6 +136,15 @@ describe("draft round-trip", () => {
       }),
     ).toBeNull();
   });
+
+  it("hydrates legacy drafts with a different roundsPerRun than the current default", () => {
+    const run = createRun(5, () => 0.33);
+    const snap = runToDraftSnapshot(run);
+    const restored = hydrateRunFromDraft(snap);
+    expect(restored).not.toBeNull();
+    expect(restored.roundsPerRun).toBe(5);
+    expect(restored.targets).toHaveLength(5);
+  });
 });
 
 describe("currentRoundIndex", () => {

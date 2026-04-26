@@ -1,7 +1,7 @@
 import { matchPercentHsv, randomTargetHsv } from "./color.js";
 
-/** Number of rounds per run in schema version 1. */
-export const ROUNDS_PER_RUN = 5;
+/** Default rounds for a new run. Drafts and history sessions store their own length (e.g. older 5-round data). */
+export const ROUNDS_PER_RUN = 3;
 export const RUN_SEED_DIGITS = 10;
 export const CHALLENGE_PAYLOAD_VERSION = 1;
 export const CHALLENGE_AUTHOR_NAME_MAX_LEN = 24;
